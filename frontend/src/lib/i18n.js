@@ -1,0 +1,91 @@
+/** Patient-facing strings for the kiosk and the pre-visit form. Add a language by adding a key. Missing keys fall back to English. */
+const STR = {
+  en: {
+    welcome: 'Welcome. Let\'s get you checked in.', welcomeSub: 'Tap below to start. You will confirm who you are, finish any forms, share your insurance or ABHA details, and sign consent. It takes about two minutes.',
+    start: 'Start check-in', needHelp: 'I need help from the front desk', largerText: 'Larger text', highContrast: 'High contrast', askHelp: 'Ask for help', cancelClear: 'Cancel and clear', sessionClears: 'Screen clears after {n}s of inactivity',
+    whoAreYou: 'First, tell us who you are', mobile: 'Mobile number', nameDob: 'Last name and birthday', abha: 'ABHA number', findAppt: 'Find my appointment', onlyInitial: 'We only show your first name and last initial on this screen.',
+    whichOfYou: 'Which of you is checking in?', hi: 'Hi', arrivedNote: 'You are marked as arrived. Your token is', at: 'at', withDr: 'with',
+    healthForms: 'Health forms', allDone: 'All sections complete', formsSub: 'Medical history, dental concerns, medicines, allergies', insuranceCard: 'Insurance / scheme', insuranceSub: 'Card, policy, PM-JAY, CGHS, ESIC or self-pay', onFile: 'On file', consent: 'Consent', consentSub: 'Read and sign the treatment consent', signed: 'Signed', done: 'Done', todo: 'To do',
+    finish: 'Finish check-in', finishAnyway: 'Finish anyway — the front desk will help with the rest', back: 'Back', of: 'of', prefilledNote: 'These answers are from your last visit. Please check them and save.',
+    insTitle: 'Insurance or scheme', insSub: 'Place your card face up on the scanner and tap Scan, choose a scheme, or type the details.', scan: 'Scan card', typeIt: 'Type it in', selfPay: 'I will pay myself', checkDetails: 'Please check these details.', insurer: 'Insurance company / TPA', memberId: 'Policy / member ID', group: 'Group number', abhaOpt: 'ABHA number (optional)', looksRight: 'Looks right',
+    consentTitle: 'Consent to treatment', agree: 'I have read and agree to the above', signFinger: 'Sign with your finger', orType: 'or type your name:', fullNamePh: 'Full name', clear: 'Clear', signContinue: 'Sign and continue',
+    helpTitle: 'We\'ll be right with you', helpSub: 'Tell us what you need, or just tap the button and someone from the front desk will come over.', helpOpts: ['I cannot find my appointment', 'The screen is hard to read', 'I have a question about my insurance or payment', 'I would rather do this on paper'], somethingElse: 'Something else…', callDesk: 'Call the front desk', neverMind: 'Never mind', helpSent: 'The front desk has been notified. Please have a seat and someone will come to you.',
+    checkedIn: 'You\'re checked in', yourToken: 'Your token', haveSeat: 'Please have a seat and watch the display board.', willSee: 'will see you shortly.', deskWillHelp: 'The front desk will help you finish:', clearsIn: 'This screen clears in {n} seconds.', fee: 'Consultation fee', payAtDesk: 'pay at the desk by UPI, cash or card',
+    privacyTitle: 'Screen cleared for privacy', privacySub: 'The previous session has ended. The next patient can start fresh.', expired: 'Session expired. Please start again.',
+    saveContinue: 'Save and continue', none: 'None', yes: 'Yes', no: 'No', former: 'Former', na: 'Not applicable',
+    fMedTitle: 'Do any of these apply to you?', fSurg: 'Surgeries or hospital stays in the last 5 years', fSmoke: 'Do you smoke, vape, or chew tobacco / gutka?', fPreg: 'Are you pregnant or nursing?', fNotes: 'Anything else your dentist should know?',
+    fConcern: 'What would you like us to look at?', fConcernPh: 'Sensitivity, pain, a chipped tooth, cosmetic questions…', fLastClean: 'When was your last cleaning?', fAnx: 'Do you feel anxious about dental visits?', fBleed: 'Do your gums bleed when you brush?',
+    fMeds: 'List your current medicines and supplements, with doses', fMedsHint: 'Write "None" if you do not take any.', fThinners: 'Do you take blood thinners (aspirin, Ecosprin, warfarin, Eliquis…)?',
+    fAllergy: 'Allergies to medicines, foods, or materials', fAllergyHint: 'Write "None" if you have no known allergies.', fLatex: 'Latex allergy?',
+    fInsType: 'How will you cover this visit?', fAbhaAddr: 'ABHA address (optional)', fSubscriber: 'Policy holder name (if not you)', fSubDob: 'Policy holder date of birth', fTpa: 'TPA (if any)',
+    fSig: 'Type your full name as your signature', marketingOptIn: 'I am happy to receive occasional check-up reminders, offers and greetings on WhatsApp (you can reply STOP any time). Appointment reminders are sent regardless.',
+    formsHi: 'Hi {name}, let\'s get you ready for your visit', formsSub: 'This takes about 5 minutes and saves time at the clinic.', sectionsDone: '{a} of {b} sections complete', formsAllDone: 'All done — thank you!', formsAllDoneSub: 'You can update any section below until your appointment. When you arrive, check in at the kiosk for your token.', pleaseConfirm: 'Please confirm', questions: 'Questions? Call {phone}. Your answers are shared only with your care team.',
+    conditions: ['Heart condition', 'High blood pressure', 'Diabetes', 'Thyroid', 'Asthma', 'Bleeding disorder', 'Epilepsy', 'Kidney disease', 'Osteoporosis medication', 'Artificial joint', 'Cancer treatment', 'Tuberculosis (past or present)'],
+    lastCleanOpts: ['under 6 months', '6–12 months', 'over a year', 'never', 'not sure'], anxOpts: ['no', 'a little', 'very'], bleedOpts: ['no', 'sometimes', 'often'],
+  },
+  hi: {
+    welcome: 'स्वागत है। चलिए आपका चेक-इन करते हैं।', welcomeSub: 'शुरू करने के लिए नीचे टैप करें। आप अपनी पहचान की पुष्टि करेंगे, फ़ॉर्म पूरे करेंगे, बीमा या ABHA विवरण देंगे और सहमति पर हस्ताक्षर करेंगे। इसमें लगभग दो मिनट लगते हैं।',
+    start: 'चेक-इन शुरू करें', needHelp: 'मुझे फ्रंट डेस्क से मदद चाहिए', largerText: 'बड़ा टेक्स्ट', highContrast: 'हाई कॉन्ट्रास्ट', askHelp: 'मदद माँगें', cancelClear: 'रद्द करें और साफ़ करें', sessionClears: '{n} सेकंड निष्क्रियता के बाद स्क्रीन साफ़ हो जाएगी',
+    whoAreYou: 'पहले बताइए आप कौन हैं', mobile: 'मोबाइल नंबर', nameDob: 'उपनाम और जन्मतिथि', abha: 'ABHA नंबर', findAppt: 'मेरी अपॉइंटमेंट ढूँढें', onlyInitial: 'इस स्क्रीन पर केवल आपका पहला नाम और उपनाम का पहला अक्षर दिखता है।',
+    whichOfYou: 'आप में से कौन चेक-इन कर रहा है?', hi: 'नमस्ते', arrivedNote: 'आप पहुँच चुके हैं। आपका टोकन है', at: 'को', withDr: 'के साथ',
+    healthForms: 'स्वास्थ्य फ़ॉर्म', allDone: 'सभी भाग पूरे', formsSub: 'चिकित्सा इतिहास, दाँतों की समस्या, दवाइयाँ, एलर्जी', insuranceCard: 'बीमा / योजना', insuranceSub: 'कार्ड, पॉलिसी, PM-JAY, CGHS, ESIC या स्वयं भुगतान', onFile: 'दर्ज है', consent: 'सहमति', consentSub: 'इलाज की सहमति पढ़ें और हस्ताक्षर करें', signed: 'हस्ताक्षरित', done: 'पूरा', todo: 'बाकी',
+    finish: 'चेक-इन पूरा करें', finishAnyway: 'फिर भी पूरा करें — बाकी में फ्रंट डेस्क मदद करेगा', back: 'वापस', of: 'में से', prefilledNote: 'ये जवाब आपकी पिछली विज़िट से हैं। कृपया जाँचें और सहेजें।',
+    insTitle: 'बीमा या योजना', insSub: 'अपना कार्ड स्कैनर पर रखें और स्कैन दबाएँ, योजना चुनें, या विवरण टाइप करें।', scan: 'कार्ड स्कैन करें', typeIt: 'टाइप करें', selfPay: 'मैं स्वयं भुगतान करूँगा/करूँगी', checkDetails: 'कृपया ये विवरण जाँचें।', insurer: 'बीमा कंपनी / TPA', memberId: 'पॉलिसी / सदस्य ID', group: 'ग्रुप नंबर', abhaOpt: 'ABHA नंबर (वैकल्पिक)', looksRight: 'सही है',
+    consentTitle: 'इलाज की सहमति', agree: 'मैंने ऊपर लिखा पढ़ा है और सहमत हूँ', signFinger: 'अपनी उंगली से हस्ताक्षर करें', orType: 'या अपना नाम टाइप करें:', fullNamePh: 'पूरा नाम', clear: 'साफ़ करें', signContinue: 'हस्ताक्षर करें और आगे बढ़ें',
+    helpTitle: 'हम अभी आते हैं', helpSub: 'बताइए आपको क्या चाहिए, या बस बटन दबाएँ और फ्रंट डेस्क से कोई आपके पास आएगा।', helpOpts: ['मेरी अपॉइंटमेंट नहीं मिल रही', 'स्क्रीन पढ़ने में कठिन है', 'बीमा या भुगतान के बारे में प्रश्न है', 'मैं कागज़ पर भरना चाहूँगा/चाहूँगी'], somethingElse: 'कुछ और…', callDesk: 'फ्रंट डेस्क को बुलाएँ', neverMind: 'रहने दें', helpSent: 'फ्रंट डेस्क को सूचित कर दिया गया है। कृपया बैठें, कोई आपके पास आएगा।',
+    checkedIn: 'आपका चेक-इन हो गया', yourToken: 'आपका टोकन', haveSeat: 'कृपया बैठें और डिस्प्ले बोर्ड देखें।', willSee: 'आपको जल्द देखेंगे।', deskWillHelp: 'फ्रंट डेस्क बाकी पूरा करने में मदद करेगा:', clearsIn: 'यह स्क्रीन {n} सेकंड में साफ़ हो जाएगी।', fee: 'परामर्श शुल्क', payAtDesk: 'डेस्क पर UPI, नकद या कार्ड से भुगतान करें',
+    privacyTitle: 'गोपनीयता के लिए स्क्रीन साफ़', privacySub: 'पिछला सत्र समाप्त हो गया है। अगला मरीज़ नया शुरू कर सकता है।', expired: 'सत्र समाप्त। कृपया फिर से शुरू करें।',
+    saveContinue: 'सहेजें और आगे बढ़ें', none: 'कोई नहीं', yes: 'हाँ', no: 'नहीं', former: 'पहले करते थे', na: 'लागू नहीं',
+    fMedTitle: 'क्या इनमें से कोई आप पर लागू होता है?', fSurg: 'पिछले 5 वर्षों में सर्जरी या अस्पताल में भर्ती', fSmoke: 'क्या आप धूम्रपान, वेप या तंबाकू/गुटखा लेते हैं?', fPreg: 'क्या आप गर्भवती हैं या स्तनपान करा रही हैं?', fNotes: 'कुछ और जो आपके दंत चिकित्सक को पता होना चाहिए?',
+    fConcern: 'आप हमें क्या दिखाना चाहते हैं?', fConcernPh: 'झनझनाहट, दर्द, टूटा दाँत, सौंदर्य संबंधी प्रश्न…', fLastClean: 'आपकी पिछली सफाई कब हुई थी?', fAnx: 'क्या दाँतों के इलाज से आपको घबराहट होती है?', fBleed: 'ब्रश करते समय क्या मसूड़ों से खून आता है?',
+    fMeds: 'अपनी वर्तमान दवाइयाँ और सप्लीमेंट, खुराक सहित लिखें', fMedsHint: 'यदि कोई नहीं तो "कोई नहीं" लिखें।', fThinners: 'क्या आप खून पतला करने की दवा लेते हैं (एस्पिरिन, Ecosprin, वारफ़रिन…)?',
+    fAllergy: 'दवाइयों, भोजन या सामग्री से एलर्जी', fAllergyHint: 'यदि कोई एलर्जी नहीं है तो "कोई नहीं" लिखें।', fLatex: 'लेटेक्स एलर्जी?',
+    fInsType: 'इस विज़िट का भुगतान कैसे होगा?', fAbhaAddr: 'ABHA पता (वैकल्पिक)', fSubscriber: 'पॉलिसी धारक का नाम (यदि आप नहीं)', fSubDob: 'पॉलिसी धारक की जन्मतिथि', fTpa: 'TPA (यदि हो)',
+    fSig: 'हस्ताक्षर के रूप में अपना पूरा नाम टाइप करें', marketingOptIn: 'मुझे WhatsApp पर कभी-कभी जाँच की याद, ऑफ़र और शुभकामनाएँ पाने में खुशी होगी (आप कभी भी STOP भेज सकते हैं)। अपॉइंटमेंट रिमाइंडर फिर भी भेजे जाएँगे।',
+    formsHi: 'नमस्ते {name}, चलिए आपकी विज़िट की तैयारी करते हैं', formsSub: 'इसमें लगभग 5 मिनट लगते हैं और क्लिनिक में समय बचता है।', sectionsDone: '{b} में से {a} भाग पूरे', formsAllDone: 'सब पूरा — धन्यवाद!', formsAllDoneSub: 'अपॉइंटमेंट तक आप नीचे कोई भी भाग बदल सकते हैं। पहुँचने पर टोकन के लिए कियोस्क पर चेक-इन करें।', pleaseConfirm: 'कृपया पुष्टि करें', questions: 'प्रश्न? {phone} पर कॉल करें। आपके जवाब केवल आपकी देखभाल टीम के साथ साझा होते हैं।',
+    conditions: ['हृदय रोग', 'उच्च रक्तचाप', 'मधुमेह', 'थायरॉइड', 'अस्थमा', 'रक्तस्राव विकार', 'मिर्गी', 'गुर्दे की बीमारी', 'ऑस्टियोपोरोसिस की दवा', 'कृत्रिम जोड़', 'कैंसर का इलाज', 'टीबी (पहले या अभी)'],
+    lastCleanOpts: ['6 महीने से कम', '6–12 महीने', 'एक साल से अधिक', 'कभी नहीं', 'पता नहीं'], anxOpts: ['नहीं', 'थोड़ी', 'बहुत'], bleedOpts: ['नहीं', 'कभी-कभी', 'अक्सर'],
+  },
+  kn: {
+    welcome: 'ಸ್ವಾಗತ. ನಿಮ್ಮ ಚೆಕ್-ಇನ್ ಮಾಡೋಣ.', welcomeSub: 'ಪ್ರಾರಂಭಿಸಲು ಕೆಳಗೆ ಟ್ಯಾಪ್ ಮಾಡಿ. ನಿಮ್ಮ ಗುರುತನ್ನು ದೃಢೀಕರಿಸಿ, ಫಾರ್ಮ್‌ಗಳನ್ನು ಪೂರ್ಣಗೊಳಿಸಿ, ವಿಮೆ ಅಥವಾ ABHA ವಿವರ ನೀಡಿ ಮತ್ತು ಸಮ್ಮತಿಗೆ ಸಹಿ ಮಾಡಿ. ಸುಮಾರು ಎರಡು ನಿಮಿಷ ಬೇಕು.',
+    start: 'ಚೆಕ್-ಇನ್ ಪ್ರಾರಂಭಿಸಿ', needHelp: 'ನನಗೆ ಫ್ರಂಟ್ ಡೆಸ್ಕ್ ಸಹಾಯ ಬೇಕು', largerText: 'ದೊಡ್ಡ ಅಕ್ಷರ', highContrast: 'ಹೆಚ್ಚು ಕಾಂಟ್ರಾಸ್ಟ್', askHelp: 'ಸಹಾಯ ಕೇಳಿ', cancelClear: 'ರದ್ದುಮಾಡಿ ಮತ್ತು ಅಳಿಸಿ', sessionClears: '{n} ಸೆಕೆಂಡ್ ನಿಷ್ಕ್ರಿಯತೆಯ ನಂತರ ಪರದೆ ಅಳಿಸಲಾಗುತ್ತದೆ',
+    whoAreYou: 'ಮೊದಲು, ನೀವು ಯಾರು ಎಂದು ತಿಳಿಸಿ', mobile: 'ಮೊಬೈಲ್ ಸಂಖ್ಯೆ', nameDob: 'ಉಪನಾಮ ಮತ್ತು ಹುಟ್ಟಿದ ದಿನಾಂಕ', abha: 'ABHA ಸಂಖ್ಯೆ', findAppt: 'ನನ್ನ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಹುಡುಕಿ', onlyInitial: 'ಈ ಪರದೆಯಲ್ಲಿ ನಿಮ್ಮ ಮೊದಲ ಹೆಸರು ಮತ್ತು ಉಪನಾಮದ ಮೊದಲ ಅಕ್ಷರ ಮಾತ್ರ ತೋರಿಸಲಾಗುತ್ತದೆ.',
+    whichOfYou: 'ನಿಮ್ಮಲ್ಲಿ ಯಾರು ಚೆಕ್-ಇನ್ ಮಾಡುತ್ತಿದ್ದೀರಿ?', hi: 'ನಮಸ್ಕಾರ', arrivedNote: 'ನೀವು ಬಂದಿರುವುದನ್ನು ಗುರುತಿಸಲಾಗಿದೆ. ನಿಮ್ಮ ಟೋಕನ್', at: 'ಕ್ಕೆ', withDr: 'ಜೊತೆ',
+    healthForms: 'ಆರೋಗ್ಯ ಫಾರ್ಮ್‌ಗಳು', allDone: 'ಎಲ್ಲಾ ಭಾಗಗಳು ಪೂರ್ಣ', formsSub: 'ವೈದ್ಯಕೀಯ ಇತಿಹಾಸ, ಹಲ್ಲಿನ ಸಮಸ್ಯೆ, ಔಷಧಿಗಳು, ಅಲರ್ಜಿ', insuranceCard: 'ವಿಮೆ / ಯೋಜನೆ', insuranceSub: 'ಕಾರ್ಡ್, ಪಾಲಿಸಿ, PM-JAY, CGHS, ESIC ಅಥವಾ ಸ್ವಂತ ಪಾವತಿ', onFile: 'ದಾಖಲಾಗಿದೆ', consent: 'ಸಮ್ಮತಿ', consentSub: 'ಚಿಕಿತ್ಸೆಯ ಸಮ್ಮತಿ ಓದಿ ಸಹಿ ಮಾಡಿ', signed: 'ಸಹಿ ಮಾಡಲಾಗಿದೆ', done: 'ಮುಗಿದಿದೆ', todo: 'ಬಾಕಿ',
+    finish: 'ಚೆಕ್-ಇನ್ ಮುಗಿಸಿ', finishAnyway: 'ಹೇಗಾದರೂ ಮುಗಿಸಿ — ಉಳಿದದ್ದಕ್ಕೆ ಫ್ರಂಟ್ ಡೆಸ್ಕ್ ಸಹಾಯ ಮಾಡುತ್ತದೆ', back: 'ಹಿಂದೆ', of: 'ರಲ್ಲಿ', prefilledNote: 'ಈ ಉತ್ತರಗಳು ನಿಮ್ಮ ಕಳೆದ ಭೇಟಿಯದ್ದು. ದಯವಿಟ್ಟು ಪರಿಶೀಲಿಸಿ ಉಳಿಸಿ.',
+    insTitle: 'ವಿಮೆ ಅಥವಾ ಯೋಜನೆ', insSub: 'ನಿಮ್ಮ ಕಾರ್ಡ್ ಅನ್ನು ಸ್ಕ್ಯಾನರ್ ಮೇಲೆ ಇರಿಸಿ ಸ್ಕ್ಯಾನ್ ಒತ್ತಿ, ಯೋಜನೆ ಆರಿಸಿ, ಅಥವಾ ವಿವರ ಟೈಪ್ ಮಾಡಿ.', scan: 'ಕಾರ್ಡ್ ಸ್ಕ್ಯಾನ್ ಮಾಡಿ', typeIt: 'ಟೈಪ್ ಮಾಡಿ', selfPay: 'ನಾನೇ ಪಾವತಿಸುತ್ತೇನೆ', checkDetails: 'ದಯವಿಟ್ಟು ಈ ವಿವರಗಳನ್ನು ಪರಿಶೀಲಿಸಿ.', insurer: 'ವಿಮಾ ಕಂಪನಿ / TPA', memberId: 'ಪಾಲಿಸಿ / ಸದಸ್ಯ ID', group: 'ಗುಂಪು ಸಂಖ್ಯೆ', abhaOpt: 'ABHA ಸಂಖ್ಯೆ (ಐಚ್ಛಿಕ)', looksRight: 'ಸರಿಯಾಗಿದೆ',
+    consentTitle: 'ಚಿಕಿತ್ಸೆಗೆ ಸಮ್ಮತಿ', agree: 'ನಾನು ಮೇಲಿನದನ್ನು ಓದಿದ್ದೇನೆ ಮತ್ತು ಒಪ್ಪುತ್ತೇನೆ', signFinger: 'ಬೆರಳಿನಿಂದ ಸಹಿ ಮಾಡಿ', orType: 'ಅಥವಾ ನಿಮ್ಮ ಹೆಸರು ಟೈಪ್ ಮಾಡಿ:', fullNamePh: 'ಪೂರ್ಣ ಹೆಸರು', clear: 'ಅಳಿಸಿ', signContinue: 'ಸಹಿ ಮಾಡಿ ಮುಂದುವರಿಸಿ',
+    helpTitle: 'ನಾವು ಈಗಲೇ ಬರುತ್ತೇವೆ', helpSub: 'ನಿಮಗೆ ಏನು ಬೇಕು ಎಂದು ತಿಳಿಸಿ, ಅಥವಾ ಬಟನ್ ಒತ್ತಿ — ಫ್ರಂಟ್ ಡೆಸ್ಕ್‌ನಿಂದ ಯಾರಾದರೂ ಬರುತ್ತಾರೆ.', helpOpts: ['ನನ್ನ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಸಿಗುತ್ತಿಲ್ಲ', 'ಪರದೆ ಓದಲು ಕಷ್ಟ', 'ವಿಮೆ ಅಥವಾ ಪಾವತಿ ಬಗ್ಗೆ ಪ್ರಶ್ನೆ ಇದೆ', 'ನಾನು ಕಾಗದದಲ್ಲಿ ಮಾಡಲು ಬಯಸುತ್ತೇನೆ'], somethingElse: 'ಬೇರೆ ಏನಾದರೂ…', callDesk: 'ಫ್ರಂಟ್ ಡೆಸ್ಕ್ ಕರೆಯಿರಿ', neverMind: 'ಬೇಡ', helpSent: 'ಫ್ರಂಟ್ ಡೆಸ್ಕ್‌ಗೆ ತಿಳಿಸಲಾಗಿದೆ. ದಯವಿಟ್ಟು ಕುಳಿತುಕೊಳ್ಳಿ, ಯಾರಾದರೂ ಬರುತ್ತಾರೆ.',
+    checkedIn: 'ನಿಮ್ಮ ಚೆಕ್-ಇನ್ ಆಗಿದೆ', yourToken: 'ನಿಮ್ಮ ಟೋಕನ್', haveSeat: 'ದಯವಿಟ್ಟು ಕುಳಿತು ಡಿಸ್‌ಪ್ಲೇ ಬೋರ್ಡ್ ನೋಡಿ.', willSee: 'ನಿಮ್ಮನ್ನು ಶೀಘ್ರದಲ್ಲಿ ನೋಡುತ್ತಾರೆ.', deskWillHelp: 'ಉಳಿದದ್ದನ್ನು ಮುಗಿಸಲು ಫ್ರಂಟ್ ಡೆಸ್ಕ್ ಸಹಾಯ ಮಾಡುತ್ತದೆ:', clearsIn: 'ಈ ಪರದೆ {n} ಸೆಕೆಂಡ್‌ಗಳಲ್ಲಿ ಅಳಿಸಲಾಗುತ್ತದೆ.', fee: 'ಸಮಾಲೋಚನಾ ಶುಲ್ಕ', payAtDesk: 'ಡೆಸ್ಕ್‌ನಲ್ಲಿ UPI, ನಗದು ಅಥವಾ ಕಾರ್ಡ್ ಮೂಲಕ ಪಾವತಿಸಿ',
+    privacyTitle: 'ಗೌಪ್ಯತೆಗಾಗಿ ಪರದೆ ಅಳಿಸಲಾಗಿದೆ', privacySub: 'ಹಿಂದಿನ ಸೆಷನ್ ಮುಗಿದಿದೆ. ಮುಂದಿನ ರೋಗಿ ಹೊಸದಾಗಿ ಪ್ರಾರಂಭಿಸಬಹುದು.', expired: 'ಸೆಷನ್ ಮುಗಿದಿದೆ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಾರಂಭಿಸಿ.',
+    saveContinue: 'ಉಳಿಸಿ ಮುಂದುವರಿಸಿ', none: 'ಯಾವುದೂ ಇಲ್ಲ', yes: 'ಹೌದು', no: 'ಇಲ್ಲ', former: 'ಮೊದಲು', na: 'ಅನ್ವಯಿಸುವುದಿಲ್ಲ',
+    fMedTitle: 'ಇವುಗಳಲ್ಲಿ ಯಾವುದಾದರೂ ನಿಮಗೆ ಅನ್ವಯಿಸುತ್ತದೆಯೇ?', fSurg: 'ಕಳೆದ 5 ವರ್ಷಗಳಲ್ಲಿ ಶಸ್ತ್ರಚಿಕಿತ್ಸೆ ಅಥವಾ ಆಸ್ಪತ್ರೆ ವಾಸ', fSmoke: 'ನೀವು ಧೂಮಪಾನ, ವೇಪ್ ಅಥವಾ ತಂಬಾಕು/ಗುಟ್ಕಾ ಸೇವಿಸುತ್ತೀರಾ?', fPreg: 'ನೀವು ಗರ್ಭಿಣಿಯೇ ಅಥವಾ ಹಾಲುಣಿಸುತ್ತಿದ್ದೀರಾ?', fNotes: 'ನಿಮ್ಮ ದಂತವೈದ್ಯರು ತಿಳಿಯಬೇಕಾದ ಬೇರೆ ಏನಾದರೂ?',
+    fConcern: 'ನಾವು ಏನನ್ನು ನೋಡಬೇಕೆಂದು ಬಯಸುತ್ತೀರಿ?', fConcernPh: 'ಸಂವೇದನೆ, ನೋವು, ಮುರಿದ ಹಲ್ಲು, ಸೌಂದರ್ಯ ಪ್ರಶ್ನೆಗಳು…', fLastClean: 'ನಿಮ್ಮ ಕೊನೆಯ ಕ್ಲೀನಿಂಗ್ ಯಾವಾಗ?', fAnx: 'ದಂತ ಚಿಕಿತ್ಸೆ ಬಗ್ಗೆ ಆತಂಕವಿದೆಯೇ?', fBleed: 'ಬ್ರಷ್ ಮಾಡುವಾಗ ಒಸಡು ರಕ್ತಸ್ರಾವ ಆಗುತ್ತದೆಯೇ?',
+    fMeds: 'ನಿಮ್ಮ ಪ್ರಸ್ತುತ ಔಷಧಿಗಳು ಮತ್ತು ಪೂರಕಗಳನ್ನು ಪ್ರಮಾಣದೊಂದಿಗೆ ಬರೆಯಿರಿ', fMedsHint: 'ಯಾವುದೂ ಇಲ್ಲದಿದ್ದರೆ "ಯಾವುದೂ ಇಲ್ಲ" ಎಂದು ಬರೆಯಿರಿ.', fThinners: 'ರಕ್ತ ತೆಳುವಾಗಿಸುವ ಔಷಧ ತೆಗೆದುಕೊಳ್ಳುತ್ತೀರಾ (ಆಸ್ಪಿರಿನ್, Ecosprin, ವಾರ್ಫರಿನ್…)?',
+    fAllergy: 'ಔಷಧಿ, ಆಹಾರ ಅಥವಾ ವಸ್ತುಗಳಿಗೆ ಅಲರ್ಜಿ', fAllergyHint: 'ಅಲರ್ಜಿ ಇಲ್ಲದಿದ್ದರೆ "ಯಾವುದೂ ಇಲ್ಲ" ಎಂದು ಬರೆಯಿರಿ.', fLatex: 'ಲ್ಯಾಟೆಕ್ಸ್ ಅಲರ್ಜಿ?',
+    fInsType: 'ಈ ಭೇಟಿಯ ಪಾವತಿ ಹೇಗೆ?', fAbhaAddr: 'ABHA ವಿಳಾಸ (ಐಚ್ಛಿಕ)', fSubscriber: 'ಪಾಲಿಸಿದಾರರ ಹೆಸರು (ನೀವಲ್ಲದಿದ್ದರೆ)', fSubDob: 'ಪಾಲಿಸಿದಾರರ ಹುಟ್ಟಿದ ದಿನಾಂಕ', fTpa: 'TPA (ಇದ್ದರೆ)',
+    fSig: 'ಸಹಿಯಾಗಿ ನಿಮ್ಮ ಪೂರ್ಣ ಹೆಸರು ಟೈಪ್ ಮಾಡಿ', marketingOptIn: 'WhatsApp ನಲ್ಲಿ ಆಗಾಗ ತಪಾಸಣೆ ಜ್ಞಾಪನೆ, ಆಫರ್ ಮತ್ತು ಶುಭಾಶಯಗಳನ್ನು ಪಡೆಯಲು ನನಗೆ ಸಂತೋಷ (ಯಾವಾಗ ಬೇಕಾದರೂ STOP ಕಳುಹಿಸಬಹುದು). ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಜ್ಞಾಪನೆಗಳು ಹೇಗಿದ್ದರೂ ಕಳುಹಿಸಲಾಗುತ್ತವೆ.',
+    formsHi: 'ನಮಸ್ಕಾರ {name}, ನಿಮ್ಮ ಭೇಟಿಗೆ ಸಿದ್ಧರಾಗೋಣ', formsSub: 'ಇದಕ್ಕೆ ಸುಮಾರು 5 ನಿಮಿಷ ಬೇಕು ಮತ್ತು ಕ್ಲಿನಿಕ್‌ನಲ್ಲಿ ಸಮಯ ಉಳಿಸುತ್ತದೆ.', sectionsDone: '{b} ರಲ್ಲಿ {a} ಭಾಗಗಳು ಪೂರ್ಣ', formsAllDone: 'ಎಲ್ಲಾ ಮುಗಿದಿದೆ — ಧನ್ಯವಾದಗಳು!', formsAllDoneSub: 'ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್‌ವರೆಗೆ ಯಾವುದೇ ಭಾಗವನ್ನು ಬದಲಾಯಿಸಬಹುದು. ಬಂದಾಗ ಟೋಕನ್‌ಗಾಗಿ ಕಿಯೋಸ್ಕ್‌ನಲ್ಲಿ ಚೆಕ್-ಇನ್ ಮಾಡಿ.', pleaseConfirm: 'ದಯವಿಟ್ಟು ದೃಢೀಕರಿಸಿ', questions: 'ಪ್ರಶ್ನೆಗಳು? {phone} ಗೆ ಕರೆ ಮಾಡಿ. ನಿಮ್ಮ ಉತ್ತರಗಳು ನಿಮ್ಮ ಆರೈಕೆ ತಂಡದೊಂದಿಗೆ ಮಾತ್ರ ಹಂಚಿಕೊಳ್ಳಲಾಗುತ್ತದೆ.',
+    conditions: ['ಹೃದಯ ಸಮಸ್ಯೆ', 'ಅಧಿಕ ರಕ್ತದೊತ್ತಡ', 'ಮಧುಮೇಹ', 'ಥೈರಾಯ್ಡ್', 'ಆಸ್ತಮಾ', 'ರಕ್ತಸ್ರಾವ ಸಮಸ್ಯೆ', 'ಮೂರ್ಛೆ ರೋಗ', 'ಮೂತ್ರಪಿಂಡ ಕಾಯಿಲೆ', 'ಆಸ್ಟಿಯೊಪೊರೋಸಿಸ್ ಔಷಧ', 'ಕೃತಕ ಕೀಲು', 'ಕ್ಯಾನ್ಸರ್ ಚಿಕಿತ್ಸೆ', 'ಕ್ಷಯ (ಹಿಂದೆ ಅಥವಾ ಈಗ)'],
+    lastCleanOpts: ['6 ತಿಂಗಳ ಒಳಗೆ', '6–12 ತಿಂಗಳು', 'ಒಂದು ವರ್ಷಕ್ಕಿಂತ ಹೆಚ್ಚು', 'ಎಂದಿಗೂ ಇಲ್ಲ', 'ಗೊತ್ತಿಲ್ಲ'], anxOpts: ['ಇಲ್ಲ', 'ಸ್ವಲ್ಪ', 'ತುಂಬಾ'], bleedOpts: ['ಇಲ್ಲ', 'ಕೆಲವೊಮ್ಮೆ', 'ಆಗಾಗ'],
+  },
+};
+
+export const LANGS = [{ code: 'en', name: 'English' }, { code: 'hi', name: 'हिन्दी' }, { code: 'kn', name: 'ಕನ್ನಡ' }];
+
+export function t(lang, key, vars = {}) {
+  const v = STR[lang]?.[key] ?? STR.en[key] ?? key;
+  if (typeof v !== 'string') return v;
+  return v.replace(/\{(\w+)\}/g, (_, k) => (vars[k] ?? ''));
+}
+/** Option lists are stored in English on the server; this maps a translated label back to the English value. */
+export function optionPairs(lang, key) {
+  const en = STR.en[key]; const loc = STR[lang]?.[key] || en;
+  return en.map((value, i) => ({ value, label: loc[i] || value }));
+}
+export const SECTION_TITLES = {
+  en: { medicalHistory: 'Medical history', dentalConcerns: 'Dental concerns', medications: 'Medications', allergies: 'Allergies', insurance: 'Insurance / scheme', consent: 'Consent' },
+  hi: { medicalHistory: 'चिकित्सा इतिहास', dentalConcerns: 'दाँतों की समस्या', medications: 'दवाइयाँ', allergies: 'एलर्जी', insurance: 'बीमा / योजना', consent: 'सहमति' },
+  kn: { medicalHistory: 'ವೈದ್ಯಕೀಯ ಇತಿಹಾಸ', dentalConcerns: 'ಹಲ್ಲಿನ ಸಮಸ್ಯೆಗಳು', medications: 'ಔಷಧಿಗಳು', allergies: 'ಅಲರ್ಜಿ', insurance: 'ವಿಮೆ / ಯೋಜನೆ', consent: 'ಸಮ್ಮತಿ' },
+};
+export const sectionTitle = (lang, key) => SECTION_TITLES[lang]?.[key] || SECTION_TITLES.en[key] || key;

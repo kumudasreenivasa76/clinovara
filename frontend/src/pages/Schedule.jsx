@@ -1,17 +1,23 @@
 import React, { useEffect, useState } from 'react';
 import { IconSparkles, IconCalendarPlus, IconChevronLeft, IconChevronRight, IconPlus, IconBell, IconListDetails, IconCalendarX, IconCalendarRepeat, IconCheck, IconSend, IconClockPause, IconTrash } from '@tabler/icons-react';
 import { get, post, del } from '../lib/api.js';
-import { todayKey, addDaysKey, fmtDateLong, fmtTime, fmtWhen, fmtDate, fullName, fmtPhone, ago, fmtMoney } from '../lib/format.js';
+import { todayKey, dayKey, minutesOfDay, zonedToIso, addDaysKey, fmtDateLong, fmtTime, fmtWhen, fmtDate, fullName, fmtPhone, ago, fmtMoney } from '../lib/format.js';
 import { Card, Body, Pill, Avatar, Empty, usePoll, useAction, Modal, Field, Stat } from '../components/ui.jsx';
 
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
-export default function Schedule({ hash, branch, locations }) {
+export default function Schedule({ hash = '', branch, locations = [], providerId = null, defaultView = null }) {
   const params = new URLSearchParams(hash.split('?')[1] || '');
   const [date, setDate] = useState(todayKey());
+  // Doctor mode (providerId set) shows only that dentist and opens on the week; the front desk sees every dentist by day or one dentist by week.
+  const [view, setView] = useState(defaultView || (providerId ? 'week' : 'day'));
+  const [weekProv, setWeekProv] = useState(providerId || '');
+  const monday = addDaysKey(date, -((new Date(date + 'T12:00:00').getDay() + 6) % 7));
+  const rangeFrom = view === 'week' ? monday : date; const rangeTo = view === 'week' ? addDaysKey(monday, 6) : date;
+  const step = view === 'week' ? 7 : 1;
   const settings = usePoll(() => get('/api/settings'), []);
-  const appts = usePoll(() => get(`/api/appointments?from=${date}&to=${date}${branch ? `&locationId=${branch}` : ''}`), [date, branch], 6000);
-  const blocks = usePoll(() => get(`/api/blocks?from=${date}&to=${date}`), [date], 15000);
+  const appts = usePoll(() => get(`/api/appointments?from=${rangeFrom}&to=${rangeTo}${branch ? `&locationId=${branch}` : ''}`), [rangeFrom, rangeTo, branch], 6000);
+  const blocks = usePoll(() => get(`/api/blocks?from=${rangeFrom}&to=${rangeTo}`), [rangeFrom, rangeTo], 15000);
   const waitlist = usePoll(() => get('/api/waitlist'), [], 15000);
   const reminders = usePoll(() => get('/api/reminders/due'), [], 15000);
   const [booking, setBooking] = useState(params.get('patient') ? { patientId: params.get('patient') } : null);
@@ -28,23 +34,28 @@ export default function Schedule({ hash, branch, locations }) {
   const startH = hours ? Number(hours[0].split(':')[0]) : 9;
   const endH = hours ? Number(hours[1].split(':')[0]) : 19;
   const slotMin = 15; const slotPx = 24;
-  const providers = (s?.providers || []).filter((p) => !branch || !p.locationIds?.length || p.locationIds.includes(branch));
+  const providers = (s?.providers || []).filter((p) => (!providerId || p.id === providerId) && (!branch || !p.locationIds?.length || p.locationIds.includes(branch)));
+  const weekProvider = providers.find((p) => p.id === (weekProv || providers[0]?.id)) || providers[0];
+  const weekLabel = `${fmtDate(monday)} – ${fmtDate(addDaysKey(monday, 6))}`;
   const list = appts.data || [];
   const blk = blocks.data || [];
+  const statList = providerId ? list.filter((a) => a.providerId === providerId) : view === 'week' && weekProvider ? list.filter((a) => a.providerId === weekProvider.id) : list;
 
   return (
     <>
       <div className="page-head">
-        <div><h1>Schedule{loc ? ` · ${loc.name}` : ''}</h1><p>Visit types set the length and fee, dentists set the columns, and the AI books into the same calendar. Block time for leave, lunch or lab work.</p></div>
-        <div className="row"><button className="btn" onClick={() => setBlocking({})}><IconClockPause size={16} />Block time</button><button className="btn primary" onClick={() => setBooking({})}><IconPlus size={16} />Book appointment</button></div>
+        <div><h1>{providerId ? 'My calendar' : `Schedule${loc ? ` · ${loc.name}` : ''}`}</h1><p>{providerId ? 'The same calendar the front desk books into. Click an empty slot to book, a visit to open it.' : 'Visit types set the length and fee, dentists set the columns, and the AI books into the same calendar. Block time for leave, lunch or lab work.'}</p></div>
+        <div className="row"><button className="btn" onClick={() => setBlocking({})}><IconClockPause size={16} />Block time</button><button className="btn primary" onClick={() => setBooking(providerId ? { providerId } : {})}><IconPlus size={16} />Book appointment</button></div>
       </div>
       <div className="grid side">
         <Card>
           <div className="card-head">
-            <div className="row"><button className="btn icon" onClick={() => setDate(addDaysKey(date, -1))}><IconChevronLeft size={16} /></button><h3 style={{ minWidth: 220, textAlign: 'center' }}>{fmtDateLong(date)}</h3><button className="btn icon" onClick={() => setDate(addDaysKey(date, 1))}><IconChevronRight size={16} /></button><button className="btn sm ghost" onClick={() => setDate(todayKey())}>Today</button></div>
-            <input className="input" type="date" style={{ width: 160, padding: '6px 10px' }} value={date} onChange={(e) => e.target.value && setDate(e.target.value)} />
+            <div className="row"><button className="btn icon" onClick={() => setDate(addDaysKey(date, -step))}><IconChevronLeft size={16} /></button><h3 style={{ minWidth: 220, textAlign: 'center' }}>{view === 'week' ? weekLabel : fmtDateLong(date)}</h3><button className="btn icon" onClick={() => setDate(addDaysKey(date, step))}><IconChevronRight size={16} /></button><button className="btn sm ghost" onClick={() => setDate(todayKey())}>Today</button></div>
+            <div className="row gap-6"><div className="seg"><button className={view === 'day' ? 'active' : ''} onClick={() => setView('day')}>Day</button><button className={view === 'week' ? 'active' : ''} onClick={() => setView('week')}>Week</button></div>
+            {view === 'week' && !providerId && <select className="input" style={{ width: 190, padding: '6px 10px' }} value={weekProvider?.id || ''} onChange={(e) => setWeekProv(e.target.value)}>{providers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>}
+            <input className="input" type="date" style={{ width: 160, padding: '6px 10px' }} value={date} onChange={(e) => e.target.value && setDate(e.target.value)} /></div>
           </div>
-          {!hours ? <Empty icon={<IconCalendarX size={28} />}>The clinic is closed on this day.</Empty> : (
+          {view === 'week' ? <WeekGrid s={s} branch={branch} monday={monday} prov={weekProvider} list={list} blk={blk} onBook={setBooking} onOpen={setOpen} onDay={(d) => { setDate(d); setView('day'); }} providerFixed={!!providerId} /> : !hours ? <Empty icon={<IconCalendarX size={28} />}>The clinic is closed on this day.</Empty> : (
             <div style={{ overflow: 'auto', maxHeight: 'calc(100vh - 230px)' }}>
               <div className="sched" style={{ '--cols': providers.length }}>
                 <div className="sched-head" style={{ borderLeft: 'none' }} />
@@ -53,9 +64,9 @@ export default function Schedule({ hash, branch, locations }) {
                 {providers.map((p) => (
                   <div className="sched-col" key={p.id}>
                     {Array.from({ length: (endH - startH) * 4 }, (_, i) => <div key={i} className={`sched-slot ${i % 4 === 0 ? 'hour' : ''}`} onClick={() => setBooking({ providerId: p.id, start: slotIso(date, startH, i * slotMin), locationId: branch || p.locationIds?.[0] })} title="Book here" style={{ cursor: 'pointer' }} />)}
-                    {blk.filter((b) => b.providerId === p.id && (!branch || !b.locationId || b.locationId === branch)).map((b) => { const d = new Date(b.start); const top = Math.max(0, ((d.getHours() - startH) * 60 + d.getMinutes()) / slotMin * slotPx); const h = Math.max(slotPx, (new Date(b.end) - d) / 60000 / slotMin * slotPx - 2); return <div key={b.id} className="appt" style={{ top, height: h, background: 'repeating-linear-gradient(135deg, #eef2f5, #eef2f5 6px, #e3e9ee 6px, #e3e9ee 7px)', color: 'var(--muted)', cursor: 'default' }} title={b.reason}><div className="who truncate"><IconClockPause size={11} /> {b.reason || 'Blocked'}</div><div className="tiny">{fmtTime(b.start)} – {fmtTime(b.end)}</div><button className="btn sm ghost icon" style={{ position: 'absolute', right: 2, top: 2, padding: 2 }} onClick={() => run(async () => { await del(`/api/blocks/${b.id}`); refresh(); }, 'Block removed')}><IconTrash size={11} /></button></div>; })}
+                    {blk.filter((b) => b.providerId === p.id && (!branch || !b.locationId || b.locationId === branch)).map((b) => { const d = new Date(b.start); const top = Math.max(0, (minutesOfDay(b.start) - startH * 60) / slotMin * slotPx); const h = Math.max(slotPx, (new Date(b.end) - d) / 60000 / slotMin * slotPx - 2); return <div key={b.id} className="appt" style={{ top, height: h, background: 'repeating-linear-gradient(135deg, #eef2f5, #eef2f5 6px, #e3e9ee 6px, #e3e9ee 7px)', color: 'var(--muted)', cursor: 'default' }} title={b.reason}><div className="who truncate"><IconClockPause size={11} /> {b.reason || 'Blocked'}</div><div className="tiny">{fmtTime(b.start)} – {fmtTime(b.end)}</div><button className="btn sm ghost icon" style={{ position: 'absolute', right: 2, top: 2, padding: 2 }} onClick={() => run(async () => { await del(`/api/blocks/${b.id}`); refresh(); }, 'Block removed')}><IconTrash size={11} /></button></div>; })}
                     {list.filter((a) => a.providerId === p.id && a.status !== 'cancelled').map((a) => {
-                      const d = new Date(a.start); const top = ((d.getHours() - startH) * 60 + d.getMinutes()) / slotMin * slotPx;
+                      const d = new Date(a.start); const top = (minutesOfDay(a.start) - startH * 60) / slotMin * slotPx;
                       const h = Math.max(slotPx, (new Date(a.end) - d) / 60000 / slotMin * slotPx - 2);
                       return <div key={a.id} className={`appt ${a.status}`} style={{ top, height: h }} onClick={() => setOpen(a)}><div className="who truncate">{a.visit?.token ? `${a.visit.token} · ` : ''}{fullName(a.patient)}</div><div className="truncate">{a.visitType?.name} · {fmtTime(a.start)}{!branch && a.location ? ` · ${a.location.name}` : ''}</div>{a.source === 'ai' && <div className="tiny">booked by AI</div>}</div>;
                     })}
@@ -67,16 +78,16 @@ export default function Schedule({ hash, branch, locations }) {
         </Card>
         <div className="col gap-16">
           <div className="grid two">
-            <Stat value={list.filter((a) => !['cancelled', 'no_show'].includes(a.status)).length} label="Visits this day" />
-            <Stat value={list.filter((a) => a.status === 'scheduled').length} label="Unconfirmed" tone={list.some((a) => a.status === 'scheduled') ? 'warn' : ''} />
+            <Stat value={statList.filter((a) => !['cancelled', 'no_show'].includes(a.status)).length} label={view === 'week' ? 'Visits this week' : 'Visits this day'} />
+            <Stat value={statList.filter((a) => a.status === 'scheduled').length} label="Unconfirmed" tone={statList.some((a) => a.status === 'scheduled') ? 'warn' : ''} />
           </div>
-          <Card title={<span className="row gap-6"><IconBell size={16} />Reminders due</span>} actions={reminders.data?.length > 0 && <button className="btn sm primary" onClick={() => run(async () => { await post('/api/reminders/send'); refresh(); }, 'Reminders sent')}><IconSend size={14} />Send all</button>}>
+          {!providerId && <Card title={<span className="row gap-6"><IconBell size={16} />Reminders due</span>} actions={reminders.data?.length > 0 && <button className="btn sm primary" onClick={() => run(async () => { await post('/api/reminders/send'); refresh(); }, 'Reminders sent')}><IconSend size={14} />Send all</button>}>
             <div className="list">
               {(reminders.data || []).slice(0, 8).map((r) => <div className="list-item" key={r.appointment.id + r.hoursBefore}><div className="grow"><div className="small strong">{fullName(r.appointment.patient)}</div><div className="tiny muted">{r.hoursBefore}h reminder · {fmtWhen(r.appointment.start)} · {r.appointment.location?.name}</div></div><button className="btn sm" onClick={() => run(async () => { await post('/api/reminders/send', { appointmentId: r.appointment.id }); refresh(); }, 'Reminder sent')}>Send</button></div>)}
               {reminders.data?.length === 0 && <div className="empty small">All reminders are sent.</div>}
             </div>
-          </Card>
-          <Card title={<span className="row gap-6"><IconListDetails size={16} />Waitlist</span>}>
+          </Card>}
+          {!providerId && <Card title={<span className="row gap-6"><IconListDetails size={16} />Waitlist</span>}>
             <div className="list">
               {(waitlist.data || []).filter((w) => w.status !== 'booked').map((w) => (
                 <div className="list-item" key={w.id}>
@@ -88,7 +99,7 @@ export default function Schedule({ hash, branch, locations }) {
               ))}
               {(waitlist.data || []).filter((w) => w.status !== 'booked').length === 0 && <div className="empty small">Nobody is waiting.</div>}
             </div>
-          </Card>
+          </Card>}
         </div>
       </div>
       {booking && s && <BookModal init={{ ...booking, locationId: booking.locationId || branch || undefined }} settings={s} onClose={() => setBooking(null)} onDone={(a) => { setBooking(null); setDate(a.start.slice(0, 10)); refresh(); }} />}
@@ -98,7 +109,7 @@ export default function Schedule({ hash, branch, locations }) {
   );
 }
 
-function slotIso(date, startH, offsetMin) { const d = new Date(date + 'T00:00:00'); d.setHours(startH, offsetMin, 0, 0); return d.toISOString(); }
+function slotIso(date, startH, offsetMin) { return zonedToIso(date, startH + Math.floor(offsetMin / 60), offsetMin % 60); }
 
 export function PatientPicker({ value, onChange, autoFocus }) {
   const [q, setQ] = useState('');
@@ -190,7 +201,7 @@ function BlockModal({ settings, providers, date, branch, onClose, onDone }) {
   const [reason, setReason] = useState('');
   const [result, setResult] = useState(null);
   const [run, busy] = useAction();
-  const mk = (t) => { const d = new Date(day + 'T00:00:00'); const [h, m] = t.split(':').map(Number); d.setHours(h, m, 0, 0); return d.toISOString(); };
+  const mk = (t) => { const [h, m] = t.split(':').map(Number); return zonedToIso(day, h, m); };
   return (
     <Modal title="Block time" onClose={onClose} footer={<><button className="btn" onClick={onClose}>Close</button><button className="btn primary" disabled={busy || !providerId} onClick={() => run(async () => { const r = await post('/api/blocks', { providerId, locationId: branch || undefined, start: allDay ? mk('00:00') : mk(from), end: allDay ? mk('23:59') : mk(to), reason }); setResult(r); if (!r.affectedAppointments.length) onDone(); }, 'Time blocked')}><IconCheck size={16} />Block</button></>}>
       <div className="grid two">
@@ -235,5 +246,40 @@ function ApptModal({ appt, settings, onClose, onChange, onReschedule }) {
       )}
       {cancelling && <div className="card soft" style={{ padding: 12 }}><Field label="Reason"><input className="input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. patient request" autoFocus /></Field><div className="row mt-8"><button className="btn danger" disabled={busy} onClick={() => act(() => post(`/api/appointments/${appt.id}/cancel`, { reason }), 'Cancelled; waitlist checked')}>Confirm cancellation</button><button className="btn ghost" onClick={() => setCancelling(false)}>Keep</button></div><div className="tiny muted mt-8">If a waitlisted patient matches, Clinovara offers them this time automatically on WhatsApp.</div></div>}
     </Modal>
+  );
+}
+
+/** Seven days for one dentist, on the same grid the front desk uses. Click an empty slot to book, a card to open it, a day heading to zoom into that day. */
+function WeekGrid({ s, branch, monday, prov, list, blk, onBook, onOpen, onDay }) {
+  if (!s || !prov) return <div className="skeleton" />;
+  const days = Array.from({ length: 7 }, (_, i) => addDaysKey(monday, i));
+  const loc = s.locations?.find((l) => l.id === branch);
+  const src = loc?.hours || s.practice.hours;
+  const open = days.map((d) => src[DAYS[new Date(d + 'T12:00:00').getDay()]]).filter(Boolean);
+  const startH = open.length ? Math.min(...open.map((h) => Number(h[0].split(':')[0]))) : 9;
+  const endH = open.length ? Math.max(...open.map((h) => Math.ceil(Number(h[1].split(':')[0]) + Number(h[1].split(':')[1]) / 60))) : 19;
+  const slotMin = 15; const slotPx = 24; const today = todayKey();
+  const mine = list.filter((a) => a.providerId === prov.id && a.status !== 'cancelled');
+  return (
+    <div style={{ overflow: 'auto', maxHeight: 'calc(100vh - 230px)' }}>
+      <div className="sched" style={{ '--cols': 7 }}>
+        <div className="sched-head" style={{ borderLeft: 'none' }} />
+        {days.map((d) => <div className="sched-head" key={d} style={{ cursor: 'pointer', background: d === today ? 'var(--accent-soft)' : undefined }} onClick={() => onDay(d)}>{fmtDate(d).split(',')[0]} <b>{d.slice(8)}</b><div className="tiny muted" style={{ fontWeight: 400 }}>{mine.filter((a) => a.start.slice(0, 10) === d || dayKey(a.start) === d).length} visits</div></div>)}
+        <div>{Array.from({ length: (endH - startH) * 4 }, (_, i) => <div key={i} className="sched-time" style={{ height: slotPx, borderTop: i % 4 ? 'none' : undefined }}>{i % 4 === 0 ? `${((startH + i / 4) % 12) || 12}${startH + i / 4 < 12 ? 'a' : 'p'}` : ''}</div>)}</div>
+        {days.map((d) => {
+          const h = src[DAYS[new Date(d + 'T12:00:00').getDay()]];
+          const dayAppts = mine.filter((a) => dayKey(a.start) === d);
+          const dayBlocks = blk.filter((b) => b.providerId === prov.id && dayKey(b.start) === d);
+          const inHours = (i) => { if (!h) return false; const mins = startH * 60 + i * slotMin; const [a, b] = [h[0], h[1]].map((t) => Number(t.split(':')[0]) * 60 + Number(t.split(':')[1])); return mins >= a && mins < b; };
+          return (
+            <div className="sched-col" key={d} style={!h ? { background: 'var(--surface-2)' } : undefined}>
+              {Array.from({ length: (endH - startH) * 4 }, (_, i) => <div key={i} className={`sched-slot ${i % 4 === 0 ? 'hour' : ''}`} style={{ cursor: inHours(i) ? 'pointer' : 'default', background: inHours(i) ? undefined : 'var(--surface-2)' }} title={inHours(i) ? 'Book here' : 'Closed'} onClick={() => inHours(i) && onBook({ providerId: prov.id, start: slotIso(d, startH, i * slotMin), locationId: branch || prov.locationIds?.[0] })} />)}
+              {dayBlocks.map((b) => { const t = new Date(b.start); const top = Math.max(0, (minutesOfDay(b.start) - startH * 60) / slotMin * slotPx); const ht = Math.max(slotPx, (new Date(b.end) - t) / 60000 / slotMin * slotPx); return <div key={b.id} className="appt blocked" style={{ top, height: ht, background: 'repeating-linear-gradient(45deg,var(--surface-2),var(--surface-2) 6px,var(--border) 6px,var(--border) 12px)', color: 'var(--muted)' }}><div className="who truncate">{b.reason || 'Blocked'}</div></div>; })}
+              {dayAppts.map((a) => { const t = new Date(a.start); const top = (minutesOfDay(a.start) - startH * 60) / slotMin * slotPx; const ht = Math.max(slotPx, (new Date(a.end) - t) / 60000 / slotMin * slotPx - 2); return <div key={a.id} className={`appt ${a.status}`} style={{ top, height: ht }} onClick={() => onOpen(a)}><div className="who truncate">{a.visit?.token ? `${a.visit.token} · ` : ''}{fullName(a.patient)}</div><div className="truncate">{a.visitType?.name} · {fmtTime(a.start)}</div></div>; })}
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }

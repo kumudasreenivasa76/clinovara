@@ -27,11 +27,18 @@ estimates.post('/appointment', (req, res) => res.json(estimateAppointment(req.db
 export const calendar = Router();
 calendar.get('/links/:appointmentId', (req, res) => { const a = find(req.db.appointments, req.params.appointmentId, 'Appointment'); res.json(calendarLinks({ ...req.db, settings: { ...req.db.settings, tenantSlug: req.tenant.slug } }, a, { base: req.frontendBase.replace(/\/$/, '').replace(':5190', ':4200') })); });
 calendar.get('/appointment/:id.ics', (req, res) => { const a = find(req.db.appointments, req.params.id, 'Appointment'); res.setHeader('Content-Type', 'text/calendar; charset=utf-8'); res.setHeader('Content-Disposition', `attachment; filename="appointment-${a.id}.ics"`); res.send(appointmentIcs(req.db, a, { forPatient: req.role === 'public' })); });
-calendar.get('/provider/:id.ics', (req, res) => { find(req.db.settings.providers, req.params.id, 'Provider'); res.setHeader('Content-Type', 'text/calendar; charset=utf-8'); res.send(providerFeed(req.db, req.params.id)); });
+calendar.get('/provider/:id.ics', (req, res) => { find(req.db.settings.providers, req.params.id, 'Provider'); if (req.calendarKeyProvider && req.calendarKeyProvider !== req.params.id) bad('This calendar link belongs to another dentist'); res.setHeader('Content-Type', 'text/calendar; charset=utf-8'); res.send(providerFeed(req.db, req.params.id)); });
 calendar.get('/feeds', (req, res) => {
   const db = req.db; db.settings.integrations ||= {};
   const key = db.settings.integrations.calendarKey || '';
   const base = `${req.frontendBase.replace(/\/$/, '').replace(':5190', ':4200')}/api/calendar/provider`;
-  res.json({ enabled: !!key, feeds: db.settings.providers.map((p) => ({ providerId: p.id, name: p.name, url: key ? `${base}/${p.id}.ics?key=${key}` : null, webcal: key ? `${base.replace(/^https?:/, 'webcal:')}/${p.id}.ics?key=${key}` : null })) });
+  res.json({ enabled: !!key, feeds: db.settings.providers.map((p) => { const k = p.calendarKey || key; return { providerId: p.id, name: p.name, own: !!p.calendarKey, url: k ? `${base}/${p.id}.ics?key=${k}` : null, webcal: k ? `${base.replace(/^https?:/, 'webcal:')}/${p.id}.ics?key=${k}` : null }; }) });
+});
+/** A dentist switches on (or rotates / turns off) a private sync link for their own schedule only; no admin needed. */
+calendar.post('/my-key', (req, res) => {
+  const db = req.db; const p = find(db.settings.providers, req.body?.providerId, 'Provider');
+  if (!MANAGERS.has(req.role) && req.membership?.providerId !== p.id) bad('You can only manage your own calendar link');
+  if (req.body?.disable) delete p.calendarKey; else p.calendarKey = `cal_${crypto.randomBytes(12).toString('hex')}`;
+  log(db, 'settings', `${req.user} ${req.body?.disable ? 'turned off' : 'created'} the calendar sync link for ${p.name}`); req.store.save(); res.json({ enabled: !!p.calendarKey });
 });
 calendar.post('/key', (req, res) => { if (!MANAGERS.has(req.role)) bad('Only an owner or admin can manage calendar feeds'); req.db.settings.integrations ||= {}; req.db.settings.integrations.calendarKey = req.body?.disable ? '' : `cal_${crypto.randomBytes(12).toString('hex')}`; log(req.db, 'settings', `${req.user} ${req.body?.disable ? 'disabled' : 'rotated'} the calendar feed key`); req.store.save(); res.json({ enabled: !!req.db.settings.integrations.calendarKey }); });

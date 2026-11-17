@@ -8,6 +8,8 @@ const d = (f) => path.resolve(__dirname, 'src/demo', f);
 export default defineConfig({
   plugins: [react()],
   base: './',
+  // The bundler freezes process.env, so demo behaviour is switched on at build time.
+  define: { 'process.env.CLINOVARA_DEMO': '"1"', 'process.env.CLINOVARA_AI': '"rules"' },
   resolve: {
     alias: [
       { find: /^express$/, replacement: d('express-shim.js') },

@@ -2,10 +2,11 @@ import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { HttpError } from './lib.js';
+import { HttpError, useTimezone } from './lib.js';
 import { createRegistry } from './registry.js';
 import { sessionFromRequest, MANAGERS } from './domain/auth.js';
 import authRoutes from './routes/auth.js';
+import { deliverable } from './domain/mailer.js';
 import teamRoutes from './routes/team.js';
 import onboardingRoutes from './routes/onboarding.js';
 import settingsRoutes from './routes/settings.js';
@@ -22,8 +23,13 @@ import adminRoutes from './routes/admin.js';
 import fhirRoutes from './routes/fhir.js';
 import integrationRoutes from './routes/integrations.js';
 import marketingRoutes from './routes/marketing.js';
+import assistantRoutes from './routes/assistant.js';
+import dashboardRoutes from './routes/dashboard.js';
+import leadsRoutes from './routes/leads.js';
 import doctorRoutes from './routes/doctor.js';
 import callRoutes from './routes/calls.js';
+import publicRoutes from './routes/public.js';
+import doctorToolsRoutes from './routes/doctorTools.js';
 import { callbacks as callbackRoutes, estimates as estimateRoutes, calendar as calendarRoutes } from './routes/ops.js';
 import { aiMode } from './domain/frontDesk.js';
 
@@ -39,6 +45,7 @@ const PUBLIC_TENANT = [
   [/^\/calls(\/[^/]+(\/messages|\/end))?$/, ['POST']],
   [/^\/patients$/, ['GET']],
   [/^\/settings$/, ['GET']],
+  [/^\/public\/(clinic|slots|book)$/, ['GET', 'POST']],
   [/^\/calendar\/appointment\//, ['GET']],
 ];
 /** Configuration endpoints only owners and admins may change. */
@@ -46,13 +53,19 @@ const MANAGE_ONLY = [[/^\/settings/, ['PUT', 'POST']], [/^\/integrations/, ['POS
 
 export function createApp({ registry = createRegistry(), frontendBase = process.env.CLINOVARA_FRONTEND_URL || 'http://localhost:5190/' } = {}) {
   registry.ensureDemo();
+  useTimezone(null);
   const app = express();
+  if (process.env.NODE_ENV === 'production') app.set('trust proxy', 1);
   app.use(express.json({ limit: '8mb', type: ['application/json', 'application/fhir+json'] }));
   app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-user-name, x-api-key, x-tenant, Authorization');
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
     if (req.method === 'OPTIONS') return res.sendStatus(204);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    if (process.env.NODE_ENV === 'production') res.setHeader('Strict-Transport-Security', 'max-age=15552000');
     req.registry = registry;
     req.frontendBase = frontendBase;
     req.session = sessionFromRequest(registry.platform, req);
@@ -61,13 +74,14 @@ export function createApp({ registry = createRegistry(), frontendBase = process.
 
   app.get('/api/health', (req, res) => {
     const demo = registry.tenantBySlug('smilecare');
-    res.json({ ok: true, ai: aiMode(), time: new Date().toISOString(), version: '3.0', demoAvailable: !!demo, clinics: registry.platform.db.tenants.length });
+    res.json({ ok: true, ai: aiMode(), time: new Date().toISOString(), version: '3.0', demoAvailable: !!demo, clinics: registry.platform.db.tenants.length, verification: { email: deliverable('email'), sms: deliverable('sms') } });
   });
   app.use('/api/auth', authRoutes);
+  app.use('/api/leads', leadsRoutes); // public website: demo-call requests, no clinic involved
 
   // Resolve the clinic for every other /api route.
   app.use('/api', (req, res, next) => {
-    if (req.path.startsWith('/health') || req.path.startsWith('/auth')) return next();
+    if (req.path.startsWith('/health') || req.path.startsWith('/auth') || req.path.startsWith('/leads')) return next();
     const platform = registry.platform;
     let tenant = null; let role = null; let userName = null;
     if (req.session) {
@@ -78,8 +92,10 @@ export function createApp({ registry = createRegistry(), frontendBase = process.
       role = m.role; userName = user?.name || 'Staff';
       req.membership = m;
     } else if (req.path.startsWith('/calendar/provider/') && req.query.key) {
-      const hit = registry.findTenant((db) => db.settings.integrations?.calendarKey && db.settings.integrations.calendarKey === req.query.key);
+      const key = String(req.query.key);
+      const hit = registry.findTenant((db) => (db.settings.integrations?.calendarKey && db.settings.integrations.calendarKey === key) || db.settings.providers.some((p) => p.calendarKey && p.calendarKey === key));
       if (!hit) return next(new HttpError(401, 'Calendar feed key is not valid'));
+      req.calendarKeyProvider = registry.tenantStore(hit.tenant.id).db.settings.providers.find((p) => p.calendarKey === key)?.id || null;
       tenant = hit.tenant; role = 'integration'; userName = 'Calendar';
     } else if (req.path.startsWith('/fhir')) {
       const key = req.get('x-api-key') || (req.get('authorization') || '').replace(/^Bearer\s+/i, '');
@@ -100,6 +116,7 @@ export function createApp({ registry = createRegistry(), frontendBase = process.
     if (role !== 'integration' && role !== 'public' && MANAGE_ONLY.some(([re, methods]) => re.test(req.path) && methods.includes(req.method)) && !MANAGERS.has(role)) return next(new HttpError(403, 'Only clinic owners and admins can change this'));
     const store = registry.tenantStore(tenant.id);
     req.tenant = tenant; req.store = store; req.db = store.db; req.role = role; req.user = userName;
+    useTimezone(store.db.settings?.locale?.timezone);
     next();
   });
 
@@ -119,8 +136,12 @@ export function createApp({ registry = createRegistry(), frontendBase = process.
   app.use('/api/integrations', integrationRoutes);
   app.use('/api/marketing', marketingRoutes);
   app.use('/api/doctor', doctorRoutes);
+  app.use('/api/doctor', doctorToolsRoutes);
+  app.use('/api/public', publicRoutes);
   app.use('/api/calls', callRoutes);
   app.use('/api/callbacks', callbackRoutes);
+  app.use('/api/assistant', assistantRoutes);
+  app.use('/api/dashboard', dashboardRoutes);
   app.use('/api/estimates', estimateRoutes);
   app.use('/api/calendar', calendarRoutes);
   app.use('/api/fhir', fhirRoutes);

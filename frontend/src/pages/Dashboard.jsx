@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { IconUserCheck, IconAlertTriangle, IconHandStop, IconArmchair, IconCheck, IconClock, IconDeviceDesktop, IconRefresh, IconPlayerPlay, IconCash, IconBellRinging } from '@tabler/icons-react';
+import { IconUserCheck, IconAlertTriangle, IconHandStop, IconArmchair, IconCheck, IconClock, IconDeviceDesktop, IconRefresh, IconPlayerPlay, IconCash, IconBellRinging, IconPrinter, IconReceipt, IconBrandWhatsapp } from '@tabler/icons-react';
 import { get, post, patch } from '../lib/api.js';
 import { fmtTime, fmtDateLong, fullName, minutesSince, ago, fmtMoney } from '../lib/format.js';
 import { Card, Body, Pill, Avatar, Stat, Empty, usePoll, useAction, Modal, Field } from '../components/ui.jsx';
@@ -20,6 +20,7 @@ export default function Dashboard({ branch, locations }) {
   const [run] = useAction();
   const [detail, setDetail] = useState(null);
   const [paying, setPaying] = useState(null);
+  const [receipt, setReceipt] = useState(null);
   const board = data?.board || [];
   const now = Date.now();
   const act = (fn, msg) => run(async () => { await fn(); await reload(); activity.reload(); }, msg);
@@ -100,8 +101,9 @@ export default function Dashboard({ branch, locations }) {
         </Card>
       </div>
 
-      {detail && <VisitDetail row={board.find((r) => r.appointment.id === detail.appointment.id) || detail} onClose={() => setDetail(null)} act={act} onPay={() => { setPaying(detail); }} />}
-      {paying && settings.data && <PaymentModal row={paying} modes={settings.data.paymentModes || ['UPI', 'Cash', 'Card']} onClose={() => setPaying(null)} onDone={() => { setPaying(null); reload(); }} />}
+      {detail && <VisitDetail row={board.find((r) => r.appointment.id === detail.appointment.id) || detail} onClose={() => setDetail(null)} act={act} onPay={() => { setPaying(detail); }} onReceipt={setReceipt} />}
+      {paying && settings.data && <PaymentModal row={paying} modes={settings.data.paymentModes || ['UPI', 'Cash', 'Card']} onClose={() => setPaying(null)} onDone={() => { const id = paying.appointment.id; setPaying(null); reload(); setReceipt(id); }} />}
+      {receipt && <ReceiptModal appointmentId={receipt} onClose={() => setReceipt(null)} />}
     </>
   );
 }
@@ -151,7 +153,7 @@ function PaymentModal({ row, modes, onClose, onDone }) {
   );
 }
 
-function VisitDetail({ row, onClose, act, onPay }) {
+function VisitDetail({ row, onClose, act, onPay, onReceipt }) {
   const v = row.visit;
   return (
     <Modal title={`${v?.token ? v.token + ' · ' : ''}${fullName(row.patient)}`} onClose={onClose} footer={<button className="btn" onClick={onClose}>Close</button>}>
@@ -192,9 +194,37 @@ function VisitDetail({ row, onClose, act, onPay }) {
         {v && ['ready', 'called'].includes(row.stage) && <button className="btn primary" onClick={() => act(() => patch(`/api/arrivals/visits/${v.id}`, { status: 'brought_back' }), 'In chair').then(onClose)}>In chair</button>}
         {v && row.stage === 'brought_back' && <button className="btn primary" onClick={() => act(() => patch(`/api/arrivals/visits/${v.id}`, { status: 'done' }), 'Visit completed').then(onClose)}>Mark done</button>}
         {row.appointment.fee > 0 && row.appointment.paymentStatus === 'unpaid' && <button className="btn soft" onClick={() => { onClose(); onPay(); }}><IconCash size={16} />Collect payment</button>}
+        {row.appointment.paidAt && <button className="btn soft" onClick={() => { onClose(); onReceipt(row.appointment.id); }}><IconReceipt size={16} />Receipt</button>}
         <button className="btn ghost" onClick={() => { onClose(); navigate(`#/schedule?appointment=${row.appointment.id}`); }}>Open in schedule</button>
         <button className="btn ghost" onClick={() => { onClose(); navigate(`#/patients?id=${row.patient.id}`); }}>Patient record</button>
       </div>
+    </Modal>
+  );
+}
+
+function ReceiptModal({ appointmentId, onClose }) {
+  const [r, setR] = useState(null);
+  const [err, setErr] = useState('');
+  const [run, busy] = useAction();
+  React.useEffect(() => { get(`/api/arrivals/${appointmentId}/receipt`).then(setR).catch((e) => setErr(e.message)); }, [appointmentId]);
+  return (
+    <Modal title="Receipt" onClose={onClose} footer={r && <><button className="btn" disabled={busy} onClick={() => run(() => post(`/api/arrivals/${appointmentId}/receipt/send`), 'Receipt sent to the patient')}><IconBrandWhatsapp size={16} />Send to patient</button><button className="btn primary" onClick={() => window.print()}><IconPrinter size={16} />Print</button></>}>
+      {err && <div className="callout small">{err}</div>}
+      {r && (
+        <div className="receipt" id="receipt-print">
+          <div className="receipt-head"><b>{r.clinic.name}</b><div className="tiny">{[r.clinic.branch, r.clinic.address].filter(Boolean).join(' · ')}</div><div className="tiny">{[r.clinic.phone, r.clinic.email].filter(Boolean).join(' · ')}</div>{(r.clinic.gstin || r.clinic.clinicalEstablishmentNo) && <div className="tiny">{[r.clinic.gstin && `GSTIN ${r.clinic.gstin}`, r.clinic.clinicalEstablishmentNo && `Clinical Est. ${r.clinic.clinicalEstablishmentNo}`].filter(Boolean).join(' · ')}</div>}</div>
+          <div className="receipt-meta"><span>Receipt <b>{r.receiptNo}</b></span><span>{r.date}</span></div>
+          <div className="small">Received from <b>{r.patient.name}</b>{r.patient.phone ? ` · ${r.patient.phone}` : ''}{r.provider ? ` · treated by ${r.provider.name}${r.provider.registrationNo ? ` (${r.provider.registrationNo})` : ''}` : ''}</div>
+          <table className="table"><thead><tr><th>Description</th><th style={{ textAlign: 'right' }}>Amount</th></tr></thead><tbody>
+            {r.items.map((i, k) => <tr key={k}><td>{i.description}</td><td style={{ textAlign: 'right' }}>{fmtMoney(i.amount)}</td></tr>)}
+            {r.gstRate > 0 && <tr><td className="muted">GST @ {r.gstRate}% (included)</td><td style={{ textAlign: 'right' }}>{fmtMoney(r.gst)}</td></tr>}
+            <tr><td><b>Total {r.insurance ? 'billed to insurer / scheme' : 'paid'}</b></td><td style={{ textAlign: 'right' }}><b>{fmtMoney(r.total)}</b></td></tr>
+          </tbody></table>
+          <div className="tiny">{r.words}</div>
+          <div className="tiny">Mode: {r.mode}{r.reference ? ` · ref ${r.reference}` : ''}</div>
+          {r.footer && <div className="tiny muted">{r.footer}</div>}
+        </div>
+      )}
     </Modal>
   );
 }

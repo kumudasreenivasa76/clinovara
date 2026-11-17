@@ -326,6 +326,78 @@ export function buildSeed() {
   // Marks the calendar day this demo was generated for. Every appointment above is anchored to "today" at
   // generation time, so once the real date moves past it the whole demo (kiosk, arrivals, doctor's day) goes
   // stale — nothing due "today" any more. registry.js checks this on startup and reseeds automatically.
+
+  // Ninety days of past activity so dashboards and charts have something real to show. Deterministic, so reseeding never shuffles it.
+  {
+    let seedN = 20260101; const rnd = () => { seedN |= 0; seedN = (seedN + 0x6D2B79F5) | 0; let t = Math.imul(seedN ^ (seedN >>> 15), 1 | seedN); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    const pick = (list) => list[Math.floor(rnd() * list.length)];
+    const weighted = (pairs) => { let r = rnd() * pairs.reduce((a, [, w]) => a + w, 0); for (const [v, w] of pairs) { r -= w; if (r <= 0) return v; } return pairs[0][0]; };
+    const firsts = ['Anil', 'Divya', 'Karthik', 'Nisha', 'Rahul', 'Sneha', 'Vivek', 'Pooja', 'Manoj', 'Ritu', 'Sanjay', 'Deepa', 'Harish', 'Latha', 'Naveen', 'Asha', 'Imran', 'Shruti', 'Gopal', 'Bhavna', 'Tarun', 'Meena', 'Ajay', 'Kiran'];
+    const lasts = ['Sharma', 'Gowda', 'Iyer', 'Reddy', 'Kulkarni', 'Menon', 'Joshi', 'Pillai', 'Das', 'Hegde', 'Naik', 'Bhat', 'Rao', 'Khan', 'Singh', 'Kamath'];
+    const crowd = [];
+    for (let i = 0; i < 130; i += 1) {
+      const loc = rnd() < 0.7 ? IND : WHF; const born = addDays(now, -Math.floor(7000 + rnd() * 18000));
+      const pt = P(pick(firsts), pick(lasts), dayKey(born), rnd() < 0.5 ? 'male' : 'female', `98450${String(30000 + i * 37).slice(0, 5)}`, '', { locationId: loc });
+      pt.createdAt = addDays(now, -Math.floor(rnd() * 90) - 1); crowd.push(pt);
+    }
+    patients.push(...crowd);
+    const pool = [...patients];
+    const roles = { vt_cleaning: ['prov_reddy'], vt_newpatient: ['prov_rao'], vt_ortho: ['prov_khan'], vt_procedure: ['prov_menon', 'prov_rao'], vt_child: ['prov_iyer'], vt_followup: ['prov_menon', 'prov_rao'], vt_urgent: ['prov_rao', 'prov_menon'] };
+    const fees = { vt_cleaning: [1200, 1500, 1800], vt_newpatient: [500, 800], vt_ortho: [800, 3500, 6000], vt_procedure: [4500, 6000, 8500, 12000], vt_child: [600, 900], vt_followup: [400, 600], vt_urgent: [700, 1500] };
+    for (let back = 90; back >= 1; back -= 1) {
+      const day = d(-back); const dow = new Date(`${day}T12:00:00`).getDay(); if (dow === 0) continue;
+      const base = 9 + Math.round((90 - back) / 30) * 2 + (dow === 6 ? 0 : 4); const n = Math.max(4, base + Math.floor(rnd() * 6) - 2);
+      for (let k = 0; k < n; k += 1) {
+        const vtId = weighted([['vt_cleaning', 30], ['vt_newpatient', 16], ['vt_ortho', 10], ['vt_procedure', 18], ['vt_child', 9], ['vt_followup', 12], ['vt_urgent', 5]]);
+        const hour = weighted([[9, 8], [10, 14], [11, 14], [12, 8], [14, 11], [15, 13], [16, 14], [17, 10], [18, 5]]);
+        const patient = pick(pool); const status = weighted([['completed', 80], ['no_show', 8], ['cancelled', 12]]);
+        const fee = pick(fees[vtId]); const a = appt(patient, vtId, pick(roles[vtId]), patient.locationId || IND, day, `${String(hour).padStart(2, '0')}:${rnd() < 0.5 ? '00' : '30'}`, status, { source: weighted([['staff', 55], ['website', 15], ['ai', 20], ['patient', 10]]), fee, createdAt: addDays(now, -back - 3) });
+        if (status === 'completed') { a.completedAt = addMinutes(a.start, 50); const mode = weighted([['UPI', 45], ['Cash', 20], ['Card', 20], ['Insurance / cashless', 15]]); if (back > 5 || rnd() < 0.8) Object.assign(a, { paymentStatus: 'paid', paymentMode: mode, paidAmount: fee, paidAt: addMinutes(a.start, 65) }); }
+        if (status === 'cancelled') { a.cancelledAt = addDays(a.start, -1); a.cancelReason = 'Patient request'; }
+        appointments.push(a);
+      }
+    }
+    // Where the synthetic patients heard about the clinic, and 90 days of outreach with bookings that followed it.
+    for (const pt of crowd) pt.source = weighted([['Google search', 30], ['Google Maps', 20], ['Friend or family', 24], ['Instagram or Facebook', 12], ['Walked past', 8], ['Doctor referral', 6]]);
+    const sentComm = (patient, type, sentAt, body, meta = {}, by = 'Clinovara') => communications.push({ id: id('cm'), patientId: patient.id, type, channel: 'whatsapp', body, sentAt, status: 'sent', appointmentId: null, meta, by, delivery: 'simulated', lang: 'en' });
+    const followWith = (patient, sentAt) => { // a booking a few days after the message, for some patients
+      const later = appointments.filter((x) => x.patientId === patient.id && x.status !== 'cancelled' && x.start > addDays(sentAt, 3) && x.start < addDays(now, 0)).sort((x, y) => x.start.localeCompare(y.start))[0];
+      if (later && rnd() < 0.3) later.createdAt = addDays(sentAt, 1 + Math.floor(rnd() * 3));
+    };
+    const camp = (name, goal, segment, backDays, count, body) => {
+      const sentAt = addDays(now, -backDays); const cid = id('cmp'); const audience = [...pool].sort(() => rnd() - 0.5).slice(0, count);
+      for (const pt of audience) { sentComm(pt, 'marketing', sentAt, body.replace('{{firstName}}', pt.firstName), { campaignId: cid, goal }, `Campaign: ${name}`); followWith(pt, sentAt); }
+      (settings.marketingCampaigns ||= []).unshift({ id: cid, name, goal, segment, locationId: null, lang: 'en', body, notes: '', brief: '', festival: '', promptId: null, engine: 'rules', status: 'sent', createdBy: 'Kavitha Nair', createdAt: addDays(sentAt, -2), updatedAt: sentAt, approvedBy: 'Dr. Ananya Rao', approvedAt: addDays(sentAt, -1), sentAt, sentBy: 'Dr. Ananya Rao', sentCount: count, history: [{ at: addDays(sentAt, -2), by: 'Kavitha Nair', action: 'created' }, { at: addDays(sentAt, -1), by: 'Dr. Ananya Rao', action: 'approve', reason: '' }, { at: sentAt, by: 'Dr. Ananya Rao', action: 'send', reason: '' }] });
+    };
+    camp('Diwali greeting', 'festival', 'all', 12, 30, 'Warm Diwali wishes to you and your family, {{firstName}}, from all of us at SmileCare Dental.');
+    camp('Cleaning reminder: overdue patients', 'recall', 'overdue_recall', 24, 18, 'Hi {{firstName}}, your 6-monthly cleaning and check-up at SmileCare Dental is due. Reply BOOK and we will find a convenient time.');
+    camp('Win back inactive patients', 'reactivation', 'inactive_12m', 41, 22, 'Hi {{firstName}}, it has been a while since we saw you at SmileCare Dental. A check-up keeps small issues from becoming big ones.');
+    camp('Whitening month offer', 'offer', 'all', 63, 26, 'Hi {{firstName}}, this month at SmileCare Dental: professional whitening at a special price. Reply YES to book.');
+    for (let k = 0; k < 40; k += 1) { const pt = pick(pool); const when = addDays(now, -Math.floor(rnd() * 28) - 1); sentComm(pt, 'recall', when, `Hi ${pt.firstName}, your cleaning and check-up is due. Reply BOOK.`); followWith(pt, when); }
+    for (const a of appointments.filter((x) => x.status === 'completed' && x.start > addDays(now, -30) && rnd() < 0.5)) { const pt = patients.find((x) => x.id === a.patientId); if (!pt) continue; sentComm(pt, 'thank_you', addMinutes(a.start, 120), `Thank you for visiting SmileCare Dental today, ${pt.firstName}.`); if (rnd() < 0.6) sentComm(pt, 'review_request', addMinutes(a.start, 300), `Hi ${pt.firstName}, if you were happy with your visit, a Google review would mean a lot.`); }
+  }
+
+  // Some patients wrote back after a campaign or recall, as real patients do. Closed threads, so the inbox stays as it was.
+  { let n = 31; const r3 = () => { n = (n * 1103515245 + 12345) & 0x7fffffff; return n / 0x7fffffff; };
+    const replies = ['Yes please, is Saturday free?', 'Thank you, can I come next week?', 'Please book me for the morning', 'Yes, what time is available?', 'Can my wife also come along?'];
+    for (const c of communications) {
+      if (!['marketing', 'recall', 'treatment'].includes(c.type) || c.meta?.goal === 'festival' || r3() > 0.16) continue;
+      const pt = patients.find((x) => x.id === c.patientId); if (!pt) continue;
+      const at = new Date(new Date(c.sentAt).getTime() + (1 + Math.floor(r3() * 20)) * 3600000).toISOString(); if (at > now) continue;
+      conversations.push({ id: id('cnv'), patientId: pt.id, contactName: `${pt.firstName} ${pt.lastName}`, contactPhone: pt.phone, channel: 'whatsapp', status: 'closed', reason: 'Replied to a message', createdAt: at, updatedAt: at, messages: [{ id: id('msg'), from: 'patient', text: replies[Math.floor(r3() * replies.length)], at }], assignedTo: null, unread: false });
+    } }
+
+  // Sample booking-page traffic for the demo clinic only (a real clinic starts at zero and counts real visits).
+  { let n = 77; const r2 = () => { n = (n * 1103515245 + 12345) & 0x7fffffff; return n / 0x7fffffff; };
+    appointments.forEach((a, i) => { if (i % 6 === 2 && a.source !== 'ai' && a.status !== 'cancelled') a.source = 'website'; }); // some of the history came in through the booking page
+    const stats = (settings.siteStats = {});
+    for (let i = 90; i >= 0; i -= 1) {
+      const day = dayKey(addDays(now, -i)); const dow = new Date(day + 'T12:00:00').getDay();
+      const views = Math.round((dow === 0 ? 9 : 17) + r2() * 12 + (90 - i) * 0.05);
+      const sources = {}; for (let k = 0; k < views; k += 1) { const x = r2(); const src = x < 0.42 ? 'google' : x < 0.68 ? 'maps' : x < 0.84 ? 'instagram' : 'direct'; sources[src] = (sources[src] || 0) + 1; }
+      stats[day] = { views, slotChecks: Math.round(views * (0.35 + r2() * 0.15)), bookings: appointments.filter((a) => a.source === 'website' && dayKey(a.createdAt) === day).length, sources };
+    } }
+
   settings.demoSeededDate = today;
 
   return { settings, patients, appointments, waitlist, conversations, formPackets, visits, treatmentPlans, communications, kioskSessions: [], activity, blocks, webhookLog: [], callbacks: [] };
@@ -342,6 +414,13 @@ export function defaultHolidays(year = new Date().getFullYear()) {
   ];
 }
 
+const NEUTRAL_FAQ = {
+  faq_insurance: 'Insurance and cashless claims depend on your policy. Please message or call the front desk and we will check what is possible before your visit.',
+  faq_payment: 'Please ask our front desk which payment options we accept. The dentist gives you a written estimate before any treatment starts.',
+  faq_abha: 'You can share your ABHA number in the pre-visit form if you have one. We keep it with your record, with your consent.',
+  faq_rct: 'The number of visits for a root canal depends on the tooth. The dentist will confirm after examining it and taking an x-ray.',
+};
+
 /** Settings for a newly registered clinic: dental presets, no demo patients. */
 export function blankSettings({ name = 'My Dental Clinic', city = '', phone = '', email = '', whatsapp = '' } = {}) {
   const s = defaultSettings();
@@ -350,7 +429,11 @@ export function blankSettings({ name = 'My Dental Clinic', city = '', phone = ''
     practice: { ...s.practice, name, tagline: '', phone, whatsapp: whatsapp || phone, email, address: '', website: '', registrationNumber: '', clinicalEstablishmentNo: '', gstin: '', city, state: '' },
     locations: [{ id: 'loc_main', name: 'Main branch', address: '', phone, hours: HOURS, chairs: 2, kioskCode: 'MAIN1', hfrId: '' }],
     providers: [],
-    faqs: s.faqs.map((f) => ({ ...f, answer: f.answer.replace(/SmileCare Dental/g, name).replace(/Indiranagar: [\s\S]*?Both branches are on Google Maps as [^.]*\./, 'Please update the address in Settings → Approved FAQs.').replace(/Dr\. Arjun Iyer is our pediatric dentist at Indiranagar\. /, '').replace(/ \(Whitefield closes at 2:00 PM on Saturdays\)/, '') })),
+    // A new clinic must not inherit the demo clinic's claims (insurers, EMI, prices, another clinic's name): neutral answers until the owner writes their own.
+    faqs: s.faqs.map((f) => ({ ...f, answer: NEUTRAL_FAQ[f.id] || f.answer.replace(/SmileCare( Dental)?/g, name).replace(/Indiranagar: [\s\S]*?Both branches are on Google Maps as [^.]*\./, 'Please update the address in Settings → Approved FAQs.').replace(/Dr\. Arjun Iyer is our pediatric dentist at Indiranagar\. /, '').replace(/ \(Whitefield closes at 2:00 PM on Saturdays\)/, '') })),
+    marketing: { ...s.marketing, googleReviewUrl: '' }, // never ask a new clinic's patients to review the demo clinic
+    paymentModes: ['UPI', 'Cash', 'Card'],
+    insuranceOptions: (s.insuranceOptions || []).map((o) => ({ ...o, examples: '' })),
     integrations: { apiKey: '', webhooks: [], messaging: { provider: 'none', senderId: '', notes: '' }, ehr: { name: '', fhirBaseUrl: '', notes: '' }, abdm: { hipId: '', hipName: '', enabled: false } },
     fees: defaultFeePolicy(),
     assistant: { enabled: true, answerWhen: 'closed', takeNotes: true, phrases: {} },

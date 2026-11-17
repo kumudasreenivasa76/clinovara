@@ -1,11 +1,12 @@
 /** Everything one dentist or hygienist needs: dashboard, patients, visit notes, finish-visit flow, aftercare. */
 import { Router } from 'express';
 import { id, nowIso, addDays, dayKey, minutesBetween, fullName, find, bad, log } from '../lib.js';
-import { arrivalsBoard, setVisitStatus } from '../domain/visits.js';
+import { arrivalsBoard, setVisitStatus, FORM_SECTIONS, packetStatus } from '../domain/visits.js';
 import { bookAppointment, nextSlots, location } from '../domain/scheduling.js';
 import { renderTemplate, sendCommunication, templateBody } from '../domain/messaging.js';
 import { estimateAppointment } from '../domain/estimates.js';
 import { emit } from '../domain/webhooks.js';
+import { addCallback } from '../domain/hours.js';
 import { procedures as procedureCatalogue, priceItem } from '../domain/catalogue.js';
 import { visitBundle, sendToEhr } from '../domain/ehr.js';
 
@@ -181,6 +182,172 @@ r.post('/patients/:patientId/send-to-ehr', (req, res) => {
   const entry = sendToEhr(db, { bundle, reason: b.reason || 'Manual export', patientId: patient.id, visitId: b.visitId || null, planId: b.planId || null, by: req.user });
   req.store.save();
   res.status(201).json({ id: entry.id, status: entry.status, target: entry.target, note: entry.note || null });
+});
+
+/* ---------- Appointment tracking ---------- */
+const STAGE = { scheduled: 'Booked', confirmed: 'Confirmed', arrived: 'Arrived', checked_in: 'Checked in', ready: 'Ready', in_chair: 'In chair', completed: 'Completed', no_show: 'No-show', cancelled: 'Cancelled' };
+const sinceFor = (q) => { const days = Math.min(365, Number(q.days || 30)); return { days, from: addDays(nowIso(), -days) }; };
+
+/** Every appointment of this dentist across a window (past and future) with forms, payment and visit stage. */
+r.get('/appointments', (req, res) => {
+  const db = req.db; const prov = providerFor(req); if (!prov) bad('providerId required');
+  const { from } = sinceFor(req.query); const to = addDays(nowIso(), Math.min(180, Number(req.query.ahead || 30)));
+  const share = Number(prov.revenueSharePct ?? 100);
+  const list = db.appointments.filter((a) => a.providerId === prov.id && a.start >= from && a.start <= to).sort((a, b) => b.start.localeCompare(a.start)).map((a) => {
+    const patient = db.patients.find((p) => p.id === a.patientId); const visit = db.visits.find((v) => v.appointmentId === a.id);
+    const pk = db.formPackets.find((k) => k.appointmentId === a.id);
+    return {
+      id: a.id, patientId: a.patientId, patient: fullName(patient), phone: patient?.phone || '', start: a.start, end: a.end, status: a.status, stage: STAGE[a.status] || a.status,
+      visitType: db.settings.visitTypes.find((v) => v.id === a.visitTypeId)?.name || a.visitTypeId, location: location(db, a.locationId)?.name || '', source: a.source,
+      token: visit?.token || null, visitStatus: visit?.status || null, fee: a.fee || 0, paymentStatus: a.paymentStatus, paid: a.paidAmount || 0, earned: Math.round((a.paidAmount || 0) * share / 100),
+      forms: pk ? packetStatus(pk) : 'none', cancelReason: a.cancelReason || null,
+      timeline: [['Booked', a.createdAt], ['Confirmed', a.confirmedAt], ['Arrived', visit?.arrivedAt], ['Paid', a.paidAt], ['Cancelled', a.cancelledAt]].filter((x) => x[1]).map(([label, at]) => ({ label, at })),
+    };
+  });
+  const count = (st) => list.filter((a) => st.includes(a.status)).length;
+  const future = (a) => a.start > nowIso();
+  res.json({ appointments: list, counts: { upcoming: list.filter((a) => future(a) && ['scheduled', 'confirmed'].includes(a.status)).length, completed: count(['completed']), noShow: count(['no_show']), cancelled: count(['cancelled']), unconfirmed: list.filter((a) => future(a) && a.status === 'scheduled').length, formsMissing: list.filter((a) => future(a) && ['scheduled', 'confirmed'].includes(a.status) && a.forms !== 'complete').length } });
+});
+
+/* ---------- Earnings ---------- */
+r.get('/earnings', (req, res) => {
+  const db = req.db; const prov = providerFor(req); if (!prov) bad('providerId required');
+  const { days, from } = sinceFor(req.query);
+  const share = Number(prov.revenueSharePct ?? 100);
+  const mine = db.appointments.filter((a) => a.providerId === prov.id);
+  const paid = mine.filter((a) => a.paymentStatus === 'paid' && a.paidAt && a.paidAt >= from);
+  const gross = paid.reduce((s, a) => s + (a.paidAmount || 0), 0);
+  const pending = mine.filter((a) => a.status === 'completed' && a.paymentStatus !== 'paid' && a.start >= from);
+  const byDay = {}; for (const a of paid) { const d = dayKey(a.paidAt); byDay[d] = (byDay[d] || 0) + (a.paidAmount || 0); }
+  const byType = {}; const byMode = {};
+  for (const a of paid) { const n = db.settings.visitTypes.find((v) => v.id === a.visitTypeId)?.name || a.visitTypeId; byType[n] ||= { count: 0, gross: 0 }; byType[n].count++; byType[n].gross += a.paidAmount || 0; byMode[a.paymentMode || 'other'] = (byMode[a.paymentMode || 'other'] || 0) + (a.paidAmount || 0); }
+  const today = dayKey(nowIso()); const month = today.slice(0, 7);
+  const sum = (arr) => arr.reduce((s, a) => s + (a.paidAmount || 0), 0);
+  res.json({
+    windowDays: days, sharePct: share, gross, earned: Math.round(gross * share / 100), clinicShare: Math.round(gross * (100 - share) / 100), visitsPaid: paid.length, avgPerVisit: paid.length ? Math.round(gross / paid.length) : 0,
+    todayGross: sum(mine.filter((a) => a.paidAt && dayKey(a.paidAt) === today)), monthGross: sum(mine.filter((a) => a.paidAt && a.paidAt.slice(0, 7) === month)),
+    pendingAmount: pending.reduce((s, a) => s + (a.fee || 0), 0), pendingCount: pending.length,
+    pending: pending.slice(0, 20).map((a) => ({ id: a.id, patient: fullName(db.patients.find((p) => p.id === a.patientId)), start: a.start, fee: a.fee || 0 })),
+    byDay: Object.entries(byDay).sort().map(([date, amount]) => ({ date, amount })),
+    byType: Object.entries(byType).map(([name, v]) => ({ name, ...v, earned: Math.round(v.gross * share / 100) })).sort((a, b) => b.gross - a.gross),
+    byMode: Object.entries(byMode).map(([mode, amount]) => ({ mode, amount })),
+    pipeline: db.treatmentPlans.filter((t) => t.providerId === prov.id).reduce((s, t) => s + t.items.filter((i) => ['recommended', 'accepted'].includes(i.status)).reduce((x, i) => x + (Number(i.fee) || 0), 0), 0),
+  });
+});
+
+r.get('/earnings.csv', (req, res) => {
+  const db = req.db; const prov = providerFor(req); if (!prov) bad('providerId required');
+  const { from } = sinceFor(req.query); const share = Number(prov.revenueSharePct ?? 100);
+  const esc = (v) => { const t = v == null ? '' : String(v); return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+  const rows = [['Date paid', 'Receipt', 'Patient', 'Visit type', 'Mode', 'Amount', `Your share (${share}%)`].join(',')];
+  for (const a of db.appointments.filter((x) => x.providerId === prov.id && x.paymentStatus === 'paid' && x.paidAt >= from).sort((x, y) => x.paidAt.localeCompare(y.paidAt))) {
+    rows.push([dayKey(a.paidAt), a.receiptNo || '', fullName(db.patients.find((p) => p.id === a.patientId)), db.settings.visitTypes.find((v) => v.id === a.visitTypeId)?.name || '', a.paymentMode || '', a.paidAmount || 0, Math.round((a.paidAmount || 0) * share / 100)].map(esc).join(','));
+  }
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8'); res.setHeader('Content-Disposition', 'attachment; filename="earnings.csv"'); res.send(rows.join('\n'));
+});
+
+/* ---------- Forms & clinical documents ---------- */
+/** Pre-visit form status for this dentist's upcoming and recent patients. */
+r.get('/forms', (req, res) => {
+  const db = req.db; const prov = providerFor(req); if (!prov) bad('providerId required');
+  const from = addDays(nowIso(), -14);
+  const rows = db.appointments.filter((a) => a.providerId === prov.id && a.start >= from && a.status !== 'cancelled').sort((a, b) => a.start.localeCompare(b.start)).map((a) => {
+    const pk = db.formPackets.find((k) => k.appointmentId === a.id); const patient = db.patients.find((p) => p.id === a.patientId);
+    return { appointmentId: a.id, patientId: a.patientId, patient: fullName(patient), start: a.start, status: pk ? packetStatus(pk) : 'none', token: pk?.token || null,
+      sections: FORM_SECTIONS.map((sec) => ({ key: sec.key, label: sec.label, complete: !!pk?.sections[sec.key]?.complete, data: pk?.sections[sec.key]?.data || {} })) };
+  });
+  res.json({ forms: rows });
+});
+
+export const DOC_KINDS = [
+  { id: 'prescription', name: 'Prescription' }, { id: 'certificate', name: 'Dental / medical certificate' }, { id: 'referral', name: 'Referral letter' },
+  { id: 'consent', name: 'Procedure consent' }, { id: 'estimate', name: 'Treatment estimate' }, { id: 'instructions', name: 'Patient instructions' },
+];
+function docTemplate(db, prov, patient, kind) {
+  const clinic = db.settings.practice; const date = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+  const name = fullName(patient); const sym = db.settings.locale?.currencySymbol || '₹';
+  const head = `${clinic.name}\n${clinic.address || ''}\n${clinic.phone || ''}\n\n${prov.name}${prov.qualifications ? `, ${prov.qualifications}` : ''}${prov.councilRegNo ? `\nReg. No. ${prov.councilRegNo}` : ''}\nDate: ${date}\nPatient: ${name}${patient.dob ? ` (DOB ${patient.dob})` : ''}\n\n`;
+  const plan = db.treatmentPlans.find((t) => t.patientId === patient.id && t.items.some((i) => ['recommended', 'accepted'].includes(i.status)));
+  const items = plan ? plan.items.filter((i) => ['recommended', 'accepted'].includes(i.status)) : [];
+  const body = {
+    prescription: 'Rx\n\n1. \n2. \n3. \n\nAdvice: \nReview after: ',
+    certificate: `This is to certify that ${name} attended ${clinic.name} on ${date} and received dental treatment/consultation. The patient is advised rest from ___ to ___ (___ days).\n\nDiagnosis / treatment: `,
+    referral: `To: Dr. ____________\n\nDear Colleague,\nI am referring ${name} for ____________.\n\nFindings: \nTreatment done so far: \nReason for referral: \n\nThank you,`,
+    consent: `I, ${name}, have been explained the procedure ____________, its benefits, risks, alternatives and the expected cost by ${prov.name}. I have had the chance to ask questions and I consent to the treatment.\n\nPatient / guardian signature: ____________   Date: ______\nDentist signature: ____________`,
+    estimate: items.length ? `Treatment estimate\n\n${items.map((i, n) => `${n + 1}. ${i.procedure || i.name}${i.tooth ? ` (tooth ${i.tooth})` : ''} — ${sym}${Number(i.fee || 0).toLocaleString('en-IN')}`).join('\n')}\n\nTotal: ${sym}${items.reduce((s, i) => s + (Number(i.fee) || 0), 0).toLocaleString('en-IN')}\n\n${db.settings.fees?.quoteNote || 'Final fee is confirmed by the dentist.'}` : `Treatment estimate\n\n1. \n\nTotal: ${sym}`,
+    instructions: "Instructions after today's visit:\n\n- \n- \n\nCall us if you have severe pain, swelling or bleeding.",
+  };
+  return head + body[kind];
+}
+r.get('/documents', (req, res) => {
+  const db = req.db; const prov = providerFor(req); if (!prov) bad('providerId required');
+  const list = db.documents.filter((d) => d.providerId === prov.id && (!req.query.patientId || d.patientId === req.query.patientId)).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 100).map((d) => ({ ...d, patient: fullName(db.patients.find((p) => p.id === d.patientId)) }));
+  res.json({ kinds: DOC_KINDS, documents: list });
+});
+r.get('/documents/template', (req, res) => {
+  const db = req.db; const prov = providerFor(req); if (!prov) bad('providerId required');
+  const kind = String(req.query.kind || 'prescription'); if (!DOC_KINDS.some((k) => k.id === kind)) bad('Unknown document type');
+  res.json({ text: docTemplate(db, prov, find(db.patients, req.query.patientId, 'Patient'), kind) });
+});
+r.post('/documents', (req, res) => {
+  const db = req.db; const prov = providerFor(req); if (!prov) bad('providerId required');
+  const b = req.body || {}; const patient = find(db.patients, b.patientId, 'Patient');
+  if (!DOC_KINDS.some((k) => k.id === b.kind)) bad('Unknown document type');
+  if (!String(b.text || '').trim()) bad('The document is empty');
+  const doc = { id: id('doc'), patientId: patient.id, providerId: prov.id, kind: b.kind, title: DOC_KINDS.find((k) => k.id === b.kind).name, text: String(b.text), createdAt: nowIso(), createdBy: req.user, sentAt: null };
+  if (b.send) { sendCommunication(db, { patientId: patient.id, type: 'document', body: `${doc.title} from ${prov.name}:\n\n${doc.text}`, by: prov.name }); doc.sentAt = nowIso(); }
+  db.documents.push(doc);
+  log(db, 'patient', `${prov.name} issued a ${doc.title.toLowerCase()} for ${fullName(patient)}${doc.sentAt ? ' and sent it' : ''}`, { patientId: patient.id });
+  req.store.save(); res.status(201).json(doc);
+});
+
+/* ---------- Tooth chart (FDI notation) ---------- */
+export const TOOTH_STATUS = ['healthy', 'watch', 'caries', 'filled', 'crown', 'rct', 'implant', 'fracture', 'extraction', 'missing'];
+const FDI = new Set([...[1, 2, 3, 4].flatMap((q) => [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `${q}${n}`)), ...[5, 6, 7, 8].flatMap((q) => [1, 2, 3, 4, 5].map((n) => `${q}${n}`))]);
+r.get('/teeth/:patientId', (req, res) => {
+  const p = find(req.db.patients, req.params.patientId, 'Patient');
+  res.json({ teeth: p.teeth || {}, history: (p.toothHistory || []).slice(-30).reverse(), statuses: TOOTH_STATUS });
+});
+r.put('/teeth/:patientId', (req, res) => {
+  const db = req.db; const p = find(db.patients, req.params.patientId, 'Patient'); const b = req.body || {};
+  const tooth = String(b.tooth || '');
+  if (!FDI.has(tooth)) bad('Unknown tooth number (use FDI, for example 16 or 46)');
+  if (!TOOTH_STATUS.includes(b.status)) bad('Unknown tooth status');
+  p.teeth ||= {}; p.toothHistory ||= [];
+  const prev = p.teeth[tooth]?.status || 'healthy';
+  if (b.status === 'healthy' && !b.note) delete p.teeth[tooth]; else p.teeth[tooth] = { status: b.status, note: String(b.note || '').slice(0, 300), updatedAt: nowIso(), by: req.user };
+  if (prev !== b.status || b.note) p.toothHistory.push({ tooth, from: prev, to: b.status, note: String(b.note || '').slice(0, 300), at: nowIso(), by: req.user });
+  log(db, 'patient', `${req.user} marked tooth ${tooth} ${b.status} for ${fullName(p)}`, { patientId: p.id });
+  req.store.save(); res.json({ teeth: p.teeth });
+});
+
+/* ---------- Lab cases (crowns, dentures, aligners…) ---------- */
+export const LAB_KINDS = ['Crown', 'Bridge', 'Veneer', 'Denture', 'Aligners', 'Night guard', 'Implant abutment', 'Retainer', 'Other'];
+export const LAB_FLOW = ['to_send', 'at_lab', 'received', 'fitted'];
+const labView = (db, c) => ({ ...c, patient: fullName(db.patients.find((p) => p.id === c.patientId)), overdue: c.status === 'at_lab' && c.dueDate && c.dueDate < dayKey(nowIso()) });
+r.get('/lab', (req, res) => {
+  const db = req.db; const prov = providerFor(req); if (!prov) bad('providerId required');
+  res.json({ kinds: LAB_KINDS, flow: LAB_FLOW, cases: db.labCases.filter((c) => c.providerId === prov.id && !c.archived).sort((a, b) => (a.dueDate || '9').localeCompare(b.dueDate || '9')).map((c) => labView(db, c)) });
+});
+r.post('/lab', (req, res) => {
+  const db = req.db; const prov = providerFor(req); if (!prov) bad('providerId required'); const b = req.body || {};
+  const patient = find(db.patients, b.patientId, 'Patient');
+  if (!LAB_KINDS.includes(b.kind)) bad('Choose what is being made');
+  const c = { id: id('lab'), patientId: patient.id, providerId: prov.id, kind: b.kind, tooth: String(b.tooth || ''), shade: String(b.shade || ''), lab: String(b.lab || ''), dueDate: b.dueDate || '', notes: String(b.notes || '').slice(0, 500), status: 'to_send', createdAt: nowIso(), history: [{ status: 'to_send', at: nowIso(), by: req.user }] };
+  db.labCases.push(c); log(db, 'patient', `${prov.name} created a lab case (${c.kind}${c.tooth ? ` ${c.tooth}` : ''}) for ${fullName(patient)}`, { patientId: patient.id });
+  req.store.save(); res.status(201).json(labView(db, c));
+});
+r.patch('/lab/:id', (req, res) => {
+  const db = req.db; const c = find(db.labCases, req.params.id, 'Lab case'); const b = req.body || {};
+  for (const k of ['lab', 'shade', 'tooth', 'notes', 'dueDate']) if (k in b) c[k] = String(b[k] || '');
+  if (b.archive) c.archived = true;
+  if (b.status && b.status !== c.status) {
+    if (!LAB_FLOW.includes(b.status)) bad('Unknown lab status');
+    c.status = b.status; c.history.push({ status: b.status, at: nowIso(), by: req.user });
+    const patient = db.patients.find((p) => p.id === c.patientId);
+    if (b.status === 'received' && patient) addCallback(db, { source: 'lab_case', patientId: patient.id, contactName: fullName(patient), contactPhone: patient.phone, reason: `${c.kind}${c.tooth ? ` (tooth ${c.tooth})` : ''} is back from the lab. Book the fitting visit.`, priority: 'normal' });
+  }
+  req.store.save(); res.json(labView(db, c));
 });
 
 export default r;

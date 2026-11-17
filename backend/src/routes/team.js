@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { sendEmail, mailConfigured } from '../domain/mailer.js';
 import crypto from 'node:crypto';
 import { id, nowIso, addDays, bad, HttpError, log } from '../lib.js';
 import { ROLES, ROLE_LABEL, MANAGERS, publicUser, normEmail } from '../domain/auth.js';
@@ -14,7 +15,7 @@ function list(req) {
 
 r.get('/', (req, res) => res.json(list(req)));
 
-r.post('/invites', (req, res) => {
+r.post('/invites', async (req, res) => {
   const platform = req.registry.platform; const b = req.body || {};
   const email = normEmail(b.email);
   if (!email) bad('Email is required');
@@ -26,8 +27,17 @@ r.post('/invites', (req, res) => {
   const inv = { id: id('inv'), token: crypto.randomBytes(18).toString('base64url'), tenantId: req.tenant.id, email, name: b.name || '', role: b.role, providerId: b.providerId || null, invitedBy: req.session.userId, invitedByName: req.user, status: 'pending', createdAt: nowIso(), expiresAt: addDays(nowIso(), 7) };
   platform.db.invites.push(inv); platform.save();
   log(req.db, 'team', `${req.user} invited ${email} as ${ROLE_LABEL[b.role]}`); req.store.save();
-  // Email delivery is simulated: the link is returned so the owner can share it on WhatsApp.
-  res.status(201).json({ ...list(req), link: `${req.frontendBase}#/invite/${inv.token}`, note: 'No email provider is connected; share this link with your team member.' });
+  const link = `${req.frontendBase}#/invite/${inv.token}`;
+  // The link is always returned so it can also be shared on WhatsApp; it is emailed too when an email provider is configured.
+  let emailed = false;
+  if (mailConfigured()) {
+    try { await sendEmail({ to: email, subject: `${req.user} invited you to ${req.tenant.name} on Clinovara`, text: `${req.user} invited you to join ${req.tenant.name} as ${ROLE_LABEL[b.role]}.
+
+Accept the invitation: ${link}
+
+The link works for 7 days.`, html: `<p>${req.user} invited you to join <b>${req.tenant.name}</b> as ${ROLE_LABEL[b.role]}.</p><p><a href="${link}">Accept the invitation</a></p><p style="color:#666;font-size:13px">The link works for 7 days.</p>` }); emailed = true; } catch { /* the owner can still share the link */ }
+  }
+  res.status(201).json({ ...list(req), link, emailed, note: emailed ? `Invitation emailed to ${email}.` : 'Share this link with your team member.' });
 });
 r.delete('/invites/:id', (req, res) => { const platform = req.registry.platform; platform.db.invites = platform.db.invites.filter((i) => !(i.id === req.params.id && i.tenantId === req.tenant.id)); platform.save(); res.json(list(req)); });
 

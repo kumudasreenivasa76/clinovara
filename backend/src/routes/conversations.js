@@ -1,16 +1,30 @@
 import { Router } from 'express';
-import { id, nowIso, bad, find, digits, log, fullName } from '../lib.js';
+import { id, nowIso, bad, find, digits, log, fullName, HttpError } from '../lib.js';
 import { respond, applyActions } from '../domain/frontDesk.js';
 import { rescheduleAppointment, cancelAppointment, acceptWaitlistOffer } from '../domain/scheduling.js';
 import { packetFor, sendPacket } from '../domain/visits.js';
 import { emit } from '../domain/webhooks.js';
+import crypto from 'node:crypto';
+import { rateLimit } from '../lib-ratelimit.js';
 
+/** A signed-out visitor to a real clinic. The demo clinic keeps the open simulation used by the patient-chat demo page. */
+const isVisitor = (req) => req.role === 'public' && !req.tenant?.demo;
 const r = Router();
+r.post('/', (req, res, next) => (isVisitor(req) ? rateLimit({ name: 'chat-new', windowMs: 10 * 60000, max: 10 })(req, res, next) : next()));
+r.post('/:id/messages', (req, res, next) => (isVisitor(req) ? rateLimit({ name: 'chat-msg', windowMs: 10 * 60000, max: 60 })(req, res, next) : next()));
 const CHANNELS = ['call', 'sms', 'web', 'whatsapp'];
 
 function summary(db, c) {
   const last = c.messages[c.messages.length - 1];
   return { ...c, patient: c.patientId ? db.patients.find((p) => p.id === c.patientId) || null : null, lastMessage: last || null, messageCount: c.messages.length, candidatePatients: c.candidates?.map((cid) => { const p = db.patients.find((x) => x.id === cid); return p ? { id: p.id, name: fullName(p) } : null; }).filter(Boolean) || [] };
+}
+
+/** A signed-out visitor sees only their own thread, nothing internal. */
+function visitorThread(c) { return { id: c.id, status: c.status, messages: c.messages.map((m) => ({ id: m.id, from: m.from, text: m.text, at: m.at })) }; }
+/** The chat token is the visitor's proof that this conversation is theirs. */
+function ownsThread(req, conv) {
+  const given = Buffer.from(String(req.get('x-chat-token') || '')); const want = Buffer.from(String(conv.publicToken || ''));
+  return want.length > 0 && given.length === want.length && crypto.timingSafeEqual(given, want);
 }
 
 export async function processPatientMessage(db, conv, text, { frontendBase = '' } = {}) {
@@ -48,17 +62,25 @@ function intentLabel(result) {
 }
 
 r.get('/', (req, res) => {
+  if (req.role === 'public' && !req.tenant.demo) throw new HttpError(401, 'Please log in');
   const db = req.db;
   let list = db.conversations;
   if (req.query.status) list = list.filter((c) => c.status === req.query.status);
   res.json(list.slice().sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || '')).map((c) => summary(db, c)));
 });
 
-r.get('/:id', (req, res) => res.json(summary(req.db, find(req.db.conversations, req.params.id, 'Conversation'))));
+r.get('/:id', (req, res) => {
+  const conv = find(req.db.conversations, req.params.id, 'Conversation');
+  if (isVisitor(req)) { if (!ownsThread(req, conv)) throw new HttpError(403, 'This chat is not yours'); return res.json(visitorThread(conv)); }
+  res.json(summary(req.db, conv));
+});
 
 r.post('/', async (req, res) => {
   const db = req.db;
-  const b = req.body || {};
+  const visitor = isVisitor(req);
+  // A signed-out visitor is never matched to a patient on file by an ID or phone number they type: that would
+  // show another person's appointments to anyone who knows their number. Staff and verified channels can match.
+  const b = visitor ? { text: req.body?.text, contactName: String(req.body?.contactName || '').slice(0, 80), contactPhone: '', channel: 'web', forceNew: true } : (req.body || {});
   const channel = CHANNELS.includes(b.channel) ? b.channel : (db.settings.locale?.defaultChannel || 'web');
   if (!b.text) bad('text is required');
   const cc = db.settings.locale?.phoneCountryCode || '91';
@@ -74,15 +96,19 @@ r.post('/', async (req, res) => {
     conv = { id: id('cnv'), patientId: patient?.id || null, candidates, contactName: patient ? fullName(patient) : (b.contactName || (candidates ? `${db.patients.find((p) => p.id === candidates[0]).lastName} family` : 'Unknown contact')), contactPhone: digits(b.contactPhone || patient?.phone || '', cc), contactEmail: b.contactEmail || '', channel, status: 'ai', reason: '', createdAt: nowIso(), updatedAt: nowIso(), messages: [], assignedTo: null, unread: false, ai: {} };
     db.conversations.unshift(conv);
   }
+  if (visitor && !conv.publicToken) conv.publicToken = crypto.randomBytes(18).toString('base64url');
   const reply = await processPatientMessage(db, conv, b.text, { frontendBase: req.frontendBase });
   req.store.save();
+  if (visitor) return res.status(201).json({ conversation: visitorThread(conv), token: conv.publicToken });
   res.status(201).json({ conversation: summary(db, conv), reply });
 });
 
 r.post('/:id/messages', async (req, res) => {
   const db = req.db;
   const conv = find(db.conversations, req.params.id, 'Conversation');
-  const b = req.body || {};
+  const visitor = isVisitor(req);
+  if (visitor && !ownsThread(req, conv)) throw new HttpError(403, 'This chat is not yours');
+  const b = visitor ? { text: req.body?.text } : (req.body || {});
   if (!b.text) bad('text is required');
   if (b.from === 'staff') {
     conv.messages.push({ id: id('msg'), from: 'staff', by: req.user, text: b.text, at: nowIso() });
@@ -94,6 +120,7 @@ r.post('/:id/messages', async (req, res) => {
   if (conv.status === 'closed') { conv.status = 'ai'; conv.ai = {}; }
   const reply = await processPatientMessage(db, conv, b.text, { frontendBase: req.frontendBase });
   req.store.save();
+  if (visitor) return res.json({ conversation: visitorThread(conv) });
   res.json({ conversation: summary(db, conv), reply });
 });
 

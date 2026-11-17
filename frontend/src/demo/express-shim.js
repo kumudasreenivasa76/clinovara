@@ -68,6 +68,7 @@ export function Router() {
 
 export default function express() {
   const app = Router();
+  app.set = () => app; // settings such as 'trust proxy' mean nothing in the browser
   app.listen = () => ({ address: () => ({ port: 0 }), close() {} });
   /** Dispatches a fetch-style request through the app; resolves to a Response. */
   app.dispatch = (url, init = {}) => new Promise((resolve) => {

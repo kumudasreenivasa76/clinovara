@@ -2,6 +2,7 @@ import { id, nowIso, dayKey, log, fullName, find, bad } from '../lib.js';
 import { renderTemplate, sendCommunication } from './messaging.js';
 import { ACTIVE, location } from './scheduling.js';
 import { emit } from './webhooks.js';
+import { assignReceiptNo } from './billing.js';
 import { queueVisitFollowups } from './marketing.js';
 
 export const FORM_SECTIONS = [
@@ -158,8 +159,9 @@ export function recordPayment(db, appointmentId, { amount, mode, by = 'Front des
   if (!mode) bad('Payment mode is required');
   a.paymentStatus = mode === 'Insurance / cashless' ? 'insurance' : 'paid';
   a.paymentMode = mode; a.paidAmount = amount ?? a.fee; a.paidAt = nowIso(); a.paymentReference = reference; a.paymentBy = by;
+  assignReceiptNo(db, a);
   log(db, 'payment', `${by} recorded ${db.settings.locale?.currencySymbol || '₹'}${a.paidAmount} via ${mode} for ${fullName(find(db.patients, a.patientId, 'Patient'))}`, { appointmentId: a.id });
-  emit(db, 'payment.recorded', { appointmentId: a.id, patientId: a.patientId, amount: a.paidAmount, mode, reference });
+  emit(db, 'payment.recorded', { appointmentId: a.id, receiptNo: a.receiptNo, patientId: a.patientId, amount: a.paidAmount, mode, reference });
   return a;
 }
 

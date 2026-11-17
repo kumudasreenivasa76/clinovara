@@ -79,7 +79,7 @@ export default function Insights({ branch, locations }) {
 }
 
 /** Stacked bars: completed (series 1) and cancelled + no-show (series 2), one hue each, legend + hover tooltip + table view. */
-function DayChart({ series }) {
+export function DayChart({ series }) {
   const [view, setView] = useState('chart');
   const [tip, setTip] = useState(null);
   const rows = series.map((s) => ({ ...s, lost: s.cancelled + s.noShow }));

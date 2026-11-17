@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { nowIso, dayKey, find, log, fullName } from '../lib.js';
 import { arrivalsBoard, arrive, setVisitStatus, syncVisitMissing, recordPayment, queueBoard } from '../domain/visits.js';
+import { assignReceiptNo, buildReceipt, sendReceipt } from '../domain/billing.js';
 import { location } from '../domain/scheduling.js';
 import { sweepNoShows, markNoShow, isOpen, nextOpening, fmtOpening } from '../domain/hours.js';
 
@@ -55,6 +56,19 @@ r.post('/:appointmentId/payment', (req, res) => {
   const a = recordPayment(req.db, req.params.appointmentId, { amount: req.body?.amount, mode: req.body?.mode, reference: req.body?.reference, by: req.user });
   req.store.save();
   res.json(a);
+});
+
+/** Printable receipt data for a recorded payment; numbers legacy payments on first view. */
+r.get('/:appointmentId/receipt', (req, res) => {
+  const a = find(req.db.appointments, req.params.appointmentId, 'Appointment');
+  if (a.paidAt && !a.receiptNo) { assignReceiptNo(req.db, a); req.store.save(); }
+  res.json(buildReceipt(req.db, a.id));
+});
+
+r.post('/:appointmentId/receipt/send', (req, res) => {
+  const c = sendReceipt(req.db, req.params.appointmentId, { by: req.user });
+  req.store.save();
+  res.status(201).json(c);
 });
 
 r.post('/:appointmentId/no-show', (req, res) => {

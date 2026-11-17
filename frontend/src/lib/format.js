@@ -1,15 +1,31 @@
 export const pad = (n) => String(n).padStart(2, '0');
-export const dayKey = (d = new Date()) => { const x = new Date(d); return `${x.getFullYear()}-${pad(x.getMonth() + 1)}-${pad(x.getDate())}`; };
+/** Calendar day in the clinic's time zone, so "today" is the clinic's today whatever the device's zone is. */
+export const dayKey = (d = new Date()) => new Date(d).toLocaleDateString('en-CA', { timeZone: LOCALE.timezone || undefined });
+/** Wall-clock parts of an instant in the clinic's time zone. */
+function zonedParts(ms, tz) {
+  const f = new Intl.DateTimeFormat('en-CA', { timeZone: tz || undefined, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const o = Object.fromEntries(f.formatToParts(new Date(ms)).map((x) => [x.type, x.value]));
+  return { y: +o.year, mo: +o.month, d: +o.day, h: +o.hour, mi: +o.minute, s: +o.second };
+}
+/** Minutes since midnight of an instant, in the clinic's time zone (what the calendar grid is laid out in). */
+export const minutesOfDay = (iso) => { const p = zonedParts(new Date(iso).getTime(), getLocale().timezone); return p.h * 60 + p.mi; };
+/** The instant for a clinic wall-clock time, e.g. "2026-10-29" at 14:30 in Asia/Kolkata. */
+export function zonedToIso(day, hour, minute = 0) {
+  const tz = getLocale().timezone; const [y, mo, d] = day.split('-').map(Number);
+  let ms = Date.UTC(y, mo - 1, d, hour, minute);
+  for (let i = 0; i < 2; i++) { const p = zonedParts(ms, tz); ms -= Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi) - Date.UTC(y, mo - 1, d, hour, minute); }
+  return new Date(ms).toISOString();
+}
 export const todayKey = () => dayKey(new Date());
-export const addDaysKey = (key, n) => { const d = new Date(key + 'T12:00:00'); d.setDate(d.getDate() + n); return dayKey(d); };
+export const addDaysKey = (key, n) => { const [y, m, d] = key.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10); };
 
-let LOCALE = { currencySymbol: '₹', numberLocale: 'en-IN', phoneCountryCode: '91', dateLocale: 'en-IN' };
+let LOCALE = { currencySymbol: '₹', numberLocale: 'en-IN', phoneCountryCode: '91', dateLocale: 'en-IN', timezone: 'Asia/Kolkata' };
 export function setLocale(l) { if (l) LOCALE = { ...LOCALE, ...l, dateLocale: l.numberLocale || 'en-IN' }; }
 export const getLocale = () => LOCALE;
 
-export const fmtTime = (iso) => (iso ? new Date(iso).toLocaleTimeString(LOCALE.dateLocale, { hour: 'numeric', minute: '2-digit' }) : '');
-export const fmtDate = (iso) => (iso ? new Date(iso.length === 10 ? iso + 'T12:00:00' : iso).toLocaleDateString(LOCALE.dateLocale, { weekday: 'short', month: 'short', day: 'numeric' }) : '');
-export const fmtDateLong = (iso) => (iso ? new Date(iso.length === 10 ? iso + 'T12:00:00' : iso).toLocaleDateString(LOCALE.dateLocale, { weekday: 'long', month: 'long', day: 'numeric' }) : '');
+export const fmtTime = (iso) => (iso ? new Date(iso).toLocaleTimeString(LOCALE.dateLocale, { hour: 'numeric', minute: '2-digit', timeZone: LOCALE.timezone || undefined }) : '');
+export const fmtDate = (iso) => (iso ? new Date(iso.length === 10 ? iso + 'T12:00:00' : iso).toLocaleDateString(LOCALE.dateLocale, { weekday: 'short', month: 'short', day: 'numeric', ...(iso.length > 10 ? { timeZone: LOCALE.timezone || undefined } : {}) }) : '');
+export const fmtDateLong = (iso) => (iso ? new Date(iso.length === 10 ? iso + 'T12:00:00' : iso).toLocaleDateString(LOCALE.dateLocale, { weekday: 'long', month: 'long', day: 'numeric', ...(iso.length > 10 ? { timeZone: LOCALE.timezone || undefined } : {}) }) : '');
 export const fmtWhen = (iso) => (iso ? `${fmtDate(iso)}, ${fmtTime(iso)}` : '');
 export const fmtPhone = (p) => {
   const d = String(p || '').replace(/\D/g, '');

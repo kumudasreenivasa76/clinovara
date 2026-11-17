@@ -41,7 +41,7 @@ export function issueCode(platform, { channel, to, purpose }) {
   platform.db.otps = platform.db.otps.filter((o) => o.expiresAt > nowIso() && !(o.to === to && o.purpose === purpose));
   platform.db.otps.push({ id: id('otp'), channel, to, purpose, code, attempts: 0, expiresAt: addMinutes(nowIso(), 10), createdAt: nowIso() });
   platform.save();
-  console.log(`[auth] ${purpose} code for ${to}: ${code}`);
+  if (process.env.NODE_ENV !== 'production') console.log(`[auth] ${purpose} code for ${to}: ${code}`);
   return code;
 }
 export function consumeCode(platform, { to, purpose, code }) {

@@ -3,9 +3,22 @@ import crypto from 'node:crypto';
 import { id, nowIso, bad, find, log } from '../lib.js';
 import { EVENTS, emit, pending } from '../domain/webhooks.js';
 import { resend, outboxSummary } from '../domain/ehr.js';
+import { mailConfigured } from '../domain/mailer.js';
+import { smsReady, whatsappReady } from '../domain/providers.js';
+import { aiMode } from '../domain/frontDesk.js';
 
 const r = Router();
 const cfg = (db) => (db.settings.integrations ||= { apiKey: '', webhooks: [], messaging: { provider: 'none' }, ehr: {}, abdm: {} });
+
+/** What is switched on. Provider credentials live in the server environment, never in clinic settings. */
+r.get('/status', (req, res) => {
+  const db = req.db; const c = cfg(db); const m = db.settings.marketing || {};
+  res.json({
+    server: { email: mailConfigured(), sms: smsReady(), whatsapp: whatsappReady(), ai: aiMode() === 'claude' },
+    clinic: { googleReview: !!m.googleReviewUrl, calendarFeeds: !!db.settings.calendarFeeds?.enabled || undefined, webhooks: c.webhooks.length, apiKey: !!c.apiKey },
+    outbox: { simulated: db.communications.filter((x) => x.delivery === 'simulated').length, failed: db.communications.filter((x) => x.delivery === 'failed').length, sent: db.communications.filter((x) => x.delivery === 'sent').length },
+  });
+});
 
 r.get('/', (req, res) => {
   const c = cfg(req.db);

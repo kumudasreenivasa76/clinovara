@@ -1,7 +1,7 @@
 export const COLLECTIONS = [
   'settings', 'patients', 'appointments', 'waitlist', 'conversations', 'formPackets',
   'visits', 'treatmentPlans', 'communications', 'kioskSessions', 'activity', 'blocks', 'webhookLog', 'callbacks',
-  'calls', 'ehrOutbox',
+  'calls', 'ehrOutbox', 'documents', 'labCases', 'images', 'tasks',
 ];
 
 let counter = 0;
@@ -71,4 +71,17 @@ export function parseCsv(text) {
   }
   if (cur.length || row.length) { row.push(cur); rows.push(row); }
   return rows.filter((r) => r.some((c) => c.trim()));
+}
+
+/**
+ * Clinic hours ("09:00") and day boundaries are computed in the process time zone, so each request runs in its own
+ * clinic's zone (settings.locale.timezone, default CLINOVARA_TZ or Asia/Kolkata). Scheduling handlers are synchronous,
+ * so the zone cannot change underneath a request.
+ */
+export const DEFAULT_TZ = process.env.CLINOVARA_TZ || 'Asia/Kolkata';
+export function useTimezone(tz) {
+  let zone = tz || DEFAULT_TZ;
+  try { new Intl.DateTimeFormat('en', { timeZone: zone }); } catch { zone = DEFAULT_TZ; }
+  if (process.env.TZ !== zone) process.env.TZ = zone;
+  return zone;
 }

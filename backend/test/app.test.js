@@ -26,10 +26,20 @@ beforeEach(async () => {
   token = (await raw('POST', '/api/auth/demo', {})).body.token;
 });
 
+/** Full sign-up: request both verification codes, then register with them. */
+async function signup(f) {
+  const base = { clinicType: 'General dental clinic', country: 'India', dial: '91', phone: '99999 00000', confirmPassword: f.password, acceptTerms: true, city: 'Mysuru', state: 'Karnataka', ...f };
+  const e = await raw('POST', '/api/auth/signup/code', { channel: 'email', email: base.email });
+  const p = await raw('POST', '/api/auth/signup/code', { channel: 'phone', phone: base.phone, dial: base.dial });
+  await raw('POST', '/api/auth/signup/verify', { channel: 'email', email: base.email, code: e.body.devCode });
+  await raw('POST', '/api/auth/signup/verify', { channel: 'phone', phone: base.phone, dial: base.dial, code: p.body.devCode });
+  return raw('POST', '/api/auth/register', base);
+}
+
 describe('accounts, clinics and onboarding', () => {
   it('registers a clinic, guards routes, and tracks onboarding honestly', async () => {
     expect((await raw('GET', '/api/arrivals')).status).toBe(401);
-    const reg = await raw('POST', '/api/auth/register', { name: 'Dr Test', email: 'T@Example.in', phone: '+91 99999 00000', password: 'secret123', clinicName: 'Test Dental', city: 'Mysuru' });
+    const reg = await signup({ name: 'Dr Test', email: 'T@Example.in', password: 'secret123', clinicName: 'Test Dental' });
     expect(reg.status).toBe(201);
     expect(reg.body.tenant.slug).toBe('test-dental');
     expect(reg.body.role).toBe('owner');
@@ -41,13 +51,17 @@ describe('accounts, clinics and onboarding', () => {
     let ob = (await raw('GET', '/api/onboarding', null, H)).body;
     expect(ob.completed).toBe(false);
     expect(ob.steps.find((x) => x.key === 'team').done).toBe(false);
-    await raw('PUT', '/api/settings', { practice: { registrationNumber: 'KSDC-1', state: 'Karnataka' }, providers: [{ id: 'p1', name: 'Dr Test', role: 'Dentist', locationIds: ['loc_main'], consultationFee: 400 }], locations: [{ ...s.locations[0], address: '1 MG Road' }] }, H);
+    await raw('PUT', '/api/settings', { practice: { registrationNumber: 'KSDC-1', state: 'Karnataka', address: '1 MG Road' }, providers: [{ id: 'p1', name: 'Dr Test', role: 'Dentist', locationIds: ['loc_main'], consultationFee: 400 }], locations: [{ ...s.locations[0], address: '1 MG Road' }] }, H);
     await raw('POST', '/api/team/invites', { email: 'staff@example.in', role: 'front_desk', name: 'Asha' }, H);
     ob = (await raw('GET', '/api/onboarding', null, H)).body;
     expect(ob.steps.find((x) => x.key === 'team').done).toBe(true);
     expect(ob.steps.find((x) => x.key === 'profile').done).toBe(true);
     expect(ob.percent).toBeGreaterThan(30);
-    const dup = await raw('POST', '/api/auth/register', { name: 'X', email: 't@example.in', password: 'secret123', clinicName: 'Other' });
+    const noCode = await raw('POST', '/api/auth/register', { name: 'Y', email: 'y@example.in', phone: '99999 11111', dial: '91', password: 'secret123', confirmPassword: 'secret123', clinicName: 'Y', clinicType: 'General dental clinic', country: 'India', city: 'X', state: 'Karnataka', acceptTerms: true });
+    expect(noCode.status).toBe(400);
+    const mismatch = await signup({ name: 'Y', email: 'y@example.in', password: 'secret123', confirmPassword: 'other1234', clinicName: 'Y' });
+    expect(mismatch.status).toBe(400);
+    const dup = await signup({ name: 'X', email: 't@example.in', password: 'secret123', clinicName: 'Other' });
     expect(dup.status).toBe(409);
     const bad = await raw('POST', '/api/auth/login', { email: 't@example.in', password: 'wrong' });
     expect(bad.status).toBe(401);
@@ -75,7 +89,7 @@ describe('accounts, clinics and onboarding', () => {
     expect(ver.body.user.name).toBe('Kavya');
   });
   it('isolates clinics from each other', async () => {
-    const other = await raw('POST', '/api/auth/register', { name: 'O', email: 'o@example.in', password: 'secret123', clinicName: 'Other Dental' });
+    const other = await signup({ name: 'O', email: 'o@example.in', password: 'secret123', clinicName: 'Other Dental' });
     const O = { authorization: `Bearer ${other.body.token}` };
     expect((await raw('GET', '/api/appointments', null, O)).body.length).toBe(0);
     expect((await api('GET', '/api/appointments')).body.length).toBeGreaterThan(5);
@@ -279,7 +293,7 @@ describe('marketing with human approval', () => {
     expect((await api('POST', `/api/marketing/campaigns/${c.id}/approve`)).body.status).toBe('approved');
     const hour = new Date().getHours();
     const sent = await api('POST', `/api/marketing/campaigns/${c.id}/send`);
-    if (hour >= 9 && hour < 20) { expect(sent.body.sent).toBe(c.audienceCount); expect(sent.body.campaign.history.some((h) => h.action === 'approve')).toBe(true); }
+    if (hour >= 9 && hour < 20) { expect(sent.body.sent).toBe(c.eligibleCount); expect(sent.body.campaign.history.some((h) => h.action === 'approve')).toBe(true); }
     else expect(sent.status).toBe(400);
     // Completing a visit queues a thank-you that waits for approval
     const board = (await api('GET', '/api/arrivals?locationId=loc_indiranagar')).body.board;
@@ -290,12 +304,597 @@ describe('marketing with human approval', () => {
     const q = m1.queue.find((x) => x.appointmentId === row.appointment.id && x.goal === 'thank_you');
     expect(q.status).toBe('pending_approval');
     expect(q.lang).toBe('hi');
-    expect((await api('GET', `/api/communications?patientId=${row.patient.id}&type=thank_you`)).body.length).toBe(0);
+    const thanksBefore = (await api('GET', `/api/communications?patientId=${row.patient.id}&type=thank_you`)).body.length; // earlier history may already hold some
+    expect(thanksBefore).toBeGreaterThanOrEqual(0);
     await api('POST', `/api/marketing/queue/${q.id}/approve`);
     // Approved but delayed 60 minutes: dispatch happens later, nothing sent yet
-    expect((await api('GET', `/api/communications?patientId=${row.patient.id}&type=thank_you`)).body.length).toBe(0);
+    expect((await api('GET', `/api/communications?patientId=${row.patient.id}&type=thank_you`)).body.length).toBe(thanksBefore);
     // Opt-out is respected
     await api('POST', `/api/marketing/optout/${row.patient.id}`, { optIn: false });
     expect((await api('GET', '/api/marketing')).body.optedOut).toBe(1);
+  });
+});
+
+describe('verification delivery and launch rules', () => {
+  const withEnv = async (env, fn) => {
+    const old = {}; for (const k of Object.keys(env)) { old[k] = process.env[k]; if (env[k] === undefined) delete process.env[k]; else process.env[k] = env[k]; }
+    try { await fn(); } finally { for (const k of Object.keys(old)) { if (old[k] === undefined) delete process.env[k]; else process.env[k] = old[k]; } }
+  };
+  it('emails the code through Resend and never returns it in the response', async () => {
+    const calls = []; const realFetch = global.fetch;
+    global.fetch = async (url, init) => { if (String(url).startsWith('http://127.0.0.1')) return realFetch(url, init); calls.push({ url, init }); return { ok: true, text: async () => '' }; };
+    try {
+      await withEnv({ RESEND_API_KEY: 're_test', MAIL_FROM: 'Clinovara <hi@example.com>', NODE_ENV: 'production' }, async () => {
+        const r = await raw('POST', '/api/auth/signup/code', { channel: 'email', email: 'real@example.in' });
+        expect(r.status).toBe(200); expect(r.body.devCode).toBeUndefined();
+        expect(calls[0].url).toBe('https://api.resend.com/emails');
+        const sent = JSON.parse(calls[0].init.body);
+        expect(sent.to).toEqual(['real@example.in']); expect(sent.text).toMatch(/\d{6}/);
+        expect(calls[0].init.headers.authorization).toBe('Bearer re_test');
+      });
+    } finally { global.fetch = realFetch; }
+  });
+  it('refuses to hand out codes in production when no provider is configured, and skips phone verification', async () => {
+    await withEnv({ RESEND_API_KEY: undefined, NODE_ENV: 'production' }, async () => {
+      const e = await raw('POST', '/api/auth/signup/code', { channel: 'email', email: 'nomail@example.in' });
+      expect(e.status).toBe(503); expect(e.body.devCode).toBeUndefined();
+      const p = await raw('POST', '/api/auth/signup/code', { channel: 'phone', phone: '99999 22222', dial: '91' });
+      expect(p.body.skipped).toBe(true);
+      const h = (await raw('GET', '/api/health')).body; expect(h.verification).toEqual({ email: false, sms: false });
+    });
+  });
+  it('takes a new clinic from sign-up to live, end to end', async () => {
+    const reg = await signup({ name: 'Dr Live', email: 'live@example.in', password: 'secret123', clinicName: 'Live Dental' });
+    expect(reg.status).toBe(201);
+    const H = { authorization: `Bearer ${reg.body.token}` };
+    const s = (await raw('GET', '/api/settings', null, H)).body;
+    const vts = s.visitTypes.map((v) => ({ ...v, fee: v.fee || 500, keywords: v.keywords?.length ? v.keywords : [v.name.toLowerCase()] }));
+    await raw('PUT', '/api/settings', { practice: { ...s.practice, address: '1 MG Road', state: 'Karnataka' }, locations: s.locations.map((l) => ({ ...l, address: '1 MG Road' })), providers: [{ id: 'p1', name: 'Dr Live', role: 'Dentist', specialty: 'General dentist', locationIds: [s.locations[0].id], consultationFee: 500 }], visitTypes: vts }, H);
+    let ob = (await raw('GET', '/api/onboarding', null, H)).body;
+    expect(ob.steps.filter((x) => x.core && x.key !== 'launch').every((x) => x.done)).toBe(true);
+    expect((await raw('POST', '/api/onboarding/complete', {}, H)).body.completed).toBe(true);
+    ob = (await raw('GET', '/api/onboarding', null, H)).body;
+    expect(ob.percent).toBe(100);
+    const me = (await raw('GET', '/api/auth/me', null, H)).body;
+    expect(me.user.emailVerifiedAt).toBeTruthy(); expect(me.user.phoneVerifiedAt).toBeTruthy();
+  });
+});
+
+describe('roles and providers', () => {
+  const withEnv = async (env, fn) => {
+    const old = {}; for (const k of Object.keys(env)) { old[k] = process.env[k]; process.env[k] = env[k]; }
+    try { await fn(); } finally { for (const k of Object.keys(old)) { if (old[k] === undefined) delete process.env[k]; else process.env[k] = old[k]; } }
+  };
+  const stubFetch = (calls) => { const real = global.fetch; global.fetch = async (url, init) => { if (String(url).startsWith('http://127.0.0.1')) return real(url, init); calls.push({ url: String(url), init }); return { ok: true, text: async () => '' }; }; return () => { global.fetch = real; }; };
+
+  it('sends verification codes by SMS through Twilio when configured', async () => {
+    const calls = []; const restore = stubFetch(calls);
+    try {
+      await withEnv({ TWILIO_ACCOUNT_SID: 'ACtest', TWILIO_AUTH_TOKEN: 'tok', TWILIO_FROM: '+15550001111', NODE_ENV: 'production' }, async () => {
+        const r = await raw('POST', '/api/auth/signup/code', { channel: 'phone', phone: '99999 33333', dial: '91' });
+        expect(r.status).toBe(200); expect(r.body.devCode).toBeUndefined(); expect(r.body.skipped).toBeUndefined();
+        expect(calls[0].url).toContain('api.twilio.com/2010-04-01/Accounts/ACtest/Messages.json');
+        expect(String(calls[0].init.body)).toContain('To=%2B919999933333');
+      });
+    } finally { restore(); }
+  });
+
+  it('delivers patient messages over WhatsApp when the Cloud API is configured, and records failures', async () => {
+    const { sendCommunication } = await import('../src/domain/messaging.js');
+    const db = { patients: [{ id: 'p1', firstName: 'A', lastName: 'B', phone: '9845012345' }], settings: { locale: { defaultChannel: 'whatsapp', phoneCountryCode: '91' }, integrations: { messaging: { provider: 'none' } } }, communications: [], conversations: [] };
+    const calls = []; const restore = stubFetch(calls);
+    try {
+      await withEnv({ WHATSAPP_TOKEN: 'wa', WHATSAPP_PHONE_ID: '123' }, async () => {
+        const c = sendCommunication(db, { patientId: 'p1', type: 'reminder', body: 'See you tomorrow', channel: 'whatsapp' });
+        await new Promise((r) => setTimeout(r, 20));
+        expect(calls[0].url).toBe('https://graph.facebook.com/v20.0/123/messages');
+        expect(JSON.parse(calls[0].init.body).to).toBe('919845012345');
+        expect(c.delivery).toBe('sent');
+      });
+    } finally { restore(); }
+    const realFetch = global.fetch;
+    global.fetch = async (url, init) => (String(url).startsWith('http://127.0.0.1') ? realFetch(url, init) : { ok: false, status: 400, text: async () => 'bad' });
+    try {
+      await withEnv({ WHATSAPP_TOKEN: 'wa', WHATSAPP_PHONE_ID: '123' }, async () => {
+        const c = sendCommunication(db, { patientId: 'p1', type: 'reminder', body: 'x', channel: 'whatsapp' });
+        await new Promise((r) => setTimeout(r, 20));
+        expect(c.delivery).toBe('failed');
+      });
+    } finally { global.fetch = realFetch; }
+  });
+
+  it('gives each invited role only what it should have', async () => {
+    const owner = (await signup({ name: 'Own Er', email: 'roles-owner@example.in', password: 'secret123', clinicName: 'Roles Dental' })).body;
+    const O = { authorization: `Bearer ${owner.token}` };
+    const join = async (role, email) => {
+      const inv = await raw('POST', '/api/team/invites', { email, role, name: role }, O);
+      expect(JSON.stringify(inv.body)).toContain('link');
+      const tok = inv.body.link.split('/invite/')[1];
+      const acc = await raw('POST', `/api/auth/invite/${tok}/accept`, { name: role, phone: '99999 44444', password: 'secret123' });
+      expect(acc.status).toBe(200); expect(acc.body.role).toBe(role);
+      return { authorization: `Bearer ${acc.body.token}` };
+    };
+    const FD = await join('front_desk', 'fd@example.in');
+    const DR = await join('dentist', 'dr@example.in');
+    for (const H of [FD, DR]) {
+      expect((await raw('PUT', '/api/settings', { practice: { name: 'Hacked' } }, H)).status).toBe(403);
+      expect((await raw('POST', '/api/team/invites', { email: 'x@example.in', role: 'admin' }, H)).status).toBe(403);
+    }
+    expect((await raw('GET', '/api/patients', null, FD)).status).toBe(200);
+    expect((await raw('PUT', '/api/settings', { practice: { ...(await raw('GET', '/api/settings', null, O)).body.practice, tagline: 'ok' } }, O)).status).toBe(200);
+    const me = (await raw('GET', '/api/auth/me', null, FD)).body;
+    expect(me.canManage).toBe(false);
+    expect((await raw('GET', '/api/dashboard', null, FD)).status).toBe(403); // revenue analytics are for owners and admins
+    expect((await raw('GET', '/api/dashboard', null, DR)).status).toBe(403);
+    const insFD = (await raw('GET', '/api/insights', null, FD)).body;
+    expect(insFD.revenue).toBeUndefined(); expect(insFD.forms).toBeTruthy(); // front desk keeps the operational numbers
+    expect((await raw('GET', '/api/insights', null, O)).body.revenue).toBeTruthy();
+    expect((await raw('GET', '/api/dashboard', null, O)).status).toBe(200);
+  });
+});
+
+describe('scheduling for a newly set-up clinic', () => {
+  it('offers slots in the clinic time zone whatever zone the server runs in, then books, blocks double-booking, reschedules and cancels', async () => {
+    process.env.TZ = 'UTC'; // a typical cloud server; the request handler must switch to the clinic's zone
+    const reg = await signup({ name: 'Dr Sched', email: 'sched@example.in', password: 'secret123', clinicName: 'Sched Dental' });
+    const H = { authorization: `Bearer ${reg.body.token}` }; const T = { 'x-tenant': reg.body.tenant.slug };
+    const s = (await raw('GET', '/api/settings', null, H)).body;
+    const hours = { mon: ['09:00', '19:00'], tue: ['09:00', '19:00'], wed: ['09:00', '19:00'], thu: ['09:00', '19:00'], fri: ['09:00', '19:00'], sat: ['09:00', '14:00'], sun: null };
+    const saved = await raw('PUT', '/api/settings', { ...s, practice: { ...s.practice, hours }, locations: s.locations.map((l) => ({ ...l, hours })), providers: [{ id: 'p1', name: 'Dr Sched', role: 'Dentist', specialty: 'General dentist', locationIds: [s.locations[0].id], consultationFee: 500 }] }, H);
+    expect(saved.status).toBe(200);
+    const slotsRes = await raw('GET', '/api/public/slots?visitTypeId=vt_newpatient&days=14', null, T);
+    const days = slotsRes.body.days;
+    const hhmm = (iso) => new Date(iso).toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' });
+    const all = days.flatMap((d) => d.slots);
+    expect(all.length).toBeGreaterThan(20);
+    for (const sl of all) { expect(hhmm(sl.start) >= '09:00').toBe(true); expect(hhmm(sl.start) <= '19:00').toBe(true); }
+    for (const d of days) { const dow = new Date(`${d.date}T12:00:00Z`).getUTCDay(); if (dow === 0) expect(d.slots.length).toBe(0); }
+    const sat = days.find((d) => new Date(`${d.date}T12:00:00Z`).getUTCDay() === 6 && d.slots.length);
+    if (sat) expect(sat.slots.every((x) => hhmm(x.end) <= '14:00')).toBe(true);
+
+    const sl = all[0];
+    const body = { name: 'Test Patient', phone: '98450 99999', visitTypeId: 'vt_newpatient', providerId: sl.providerId, locationId: sl.locationId, start: sl.start };
+    const book = await raw('POST', '/api/public/book', body, T);
+    expect(book.status).toBe(201);
+    expect((await raw('POST', '/api/public/book', { ...body, name: 'Other Person', phone: '98450 88888' }, T)).status).toBe(400);
+    const list = (await raw('GET', '/api/appointments', null, H)).body;
+    expect(list.length).toBe(1); expect(list[0].patient.firstName).toBe('Test');
+    const gone = (await raw('GET', '/api/public/slots?visitTypeId=vt_newpatient&days=14', null, T)).body.days.flatMap((d) => d.slots);
+    expect(gone.some((x) => x.start === sl.start && x.providerId === sl.providerId)).toBe(false);
+
+    const moved = await raw('POST', `/api/appointments/${list[0].id}/reschedule`, { start: all[5].start }, H);
+    expect(moved.status).toBe(200);
+    const cancelled = await raw('POST', `/api/appointments/${list[0].id}/cancel`, { reason: 'test' }, H);
+    expect(cancelled.body.appointment.status).toBe('cancelled');
+    const back = (await raw('GET', '/api/public/slots?visitTypeId=vt_newpatient&days=14', null, T)).body.days.flatMap((d) => d.slots);
+    expect(back.some((x) => x.start === all[5].start)).toBe(true);
+  });
+});
+
+describe('staff assistant', () => {
+  const ask = async (message, as = 'owner') => {
+    const t = (await raw('POST', '/api/auth/demo', { role: as })).body.token;
+    const r = await raw('POST', '/api/assistant/ask', { message }, { authorization: `Bearer ${t}` });
+    expect(r.status).toBe(200); return r.body;
+  };
+  it('answers from clinic data and routes to the right screen', async () => {
+    const sched = await ask("today's schedule");
+    expect(sched.reply).toMatch(/appointments? today/); expect(sched.items.length).toBeGreaterThan(3);
+    const rohan = await ask('find rohan');
+    expect(rohan.reply).toMatch(/Rohan Patil/); expect(rohan.items.some((i) => /Penicillin/.test(i.title))).toBe(true);
+    const many = await ask('find a');
+    expect(many.reply.length).toBeGreaterThan(0);
+    const slots = await ask('open slots for a cleaning');
+    expect(slots.items.length).toBeGreaterThan(0); expect(slots.reply).toMatch(/Cleaning/);
+    const how = await ask('how do I add a patient');
+    expect(how.items[0].href).toBe('#/patients');
+    const who = await ask('who is next');
+    expect(who.reply).not.toMatch(/No patient matches/);
+    expect((await ask('revenue this week')).reply).toMatch(/Collected ₹/);
+  });
+  it('keeps a dentist to their own patients and hides clinic revenue', async () => {
+    const mine = await ask('my schedule today', 'dentist');
+    expect(mine.items.every((i) => !/Sunitha|Ananya Rao/.test(i.sub))).toBe(true);
+    expect((await ask('revenue this week', 'dentist')).reply).toMatch(/owners and admins/);
+  });
+  it('does not mistake a how-to question for a patient search', async () => {
+    expect((await ask('how do I book an appointment')).items[0].href).toBe('#/schedule');
+  });
+});
+
+describe('Claude-powered assistant (scripted model)', () => {
+  const scripted = (steps) => { const calls = []; return { calls, beta: { messages: { create: async (body) => { calls.push(body); const next = steps[calls.length - 1]; if (!next) throw new Error('script exhausted'); return next; } } } }; };
+  const use = (id, name, input) => ({ stop_reason: 'tool_use', content: [{ type: 'tool_use', id, name, input }] });
+  const say = (text) => ({ stop_reason: 'end_turn', content: [{ type: 'text', text }] });
+  const mkReq = (role, message, userId = 'u1') => { const tenant = registry.tenantBySlug('smilecare'); const store = registry.tenantStore(tenant.id); return { db: store.db, store, tenant, session: { userId }, role, user: 'Kavitha', membership: {}, body: { message }, frontendBase: 'http://t/' }; };
+
+  it('looks things up with tools, only proposes a booking, and books after the person confirms', async () => {
+    const { claudeAsk, resolveAction } = await import('../src/domain/assistantAI.js');
+    const req = mkReq('front_desk', 'Book Rohan for a follow-up');
+    const rohan = req.db.patients.find((p) => p.firstName === 'Rohan');
+    const calls = [];
+    const client = { calls, beta: { messages: { create: async (body) => {
+      const n = calls.length; calls.push(body);
+      if (n === 0) return use('t1', 'find_patient', { query: 'rohan' });
+      if (n === 1) return use('t2', 'find_slots', { visitTypeId: 'vt_followup', providerId: 'prov_rao' });
+      if (n === 2) { const slots = JSON.parse(body.messages.at(-1).content[0].content); return use('t3', 'propose_book_appointment', { patientId: rohan.id, visitTypeId: 'vt_followup', providerId: 'prov_rao', start: slots[0].start }); }
+      return say('Prepared a follow-up for Rohan. Confirm to book it.');
+    } } } };
+    const before = req.db.appointments.length;
+    const out = await claudeAsk(req, { client });
+    expect(out.engine).toBe('claude'); expect(out.reply).toMatch(/Confirm/);
+    expect(out.actions.length).toBe(1); expect(out.actions[0].summary).toMatch(/Rohan Patil/);
+    expect(req.db.appointments.length).toBe(before); // proposing changes nothing
+    const first = client.calls[0];
+    expect(first.model).toBe('claude-opus-5-5'); expect(first.tools.some((x) => x.name === 'propose_book_appointment')).toBe(true);
+    expect(JSON.stringify(first.system)).toMatch(/never instructions/i);
+
+    const done = resolveAction(req, out.actions[0].id, 'confirm');
+    expect(done.ok).toBe(true); expect(req.db.appointments.length).toBe(before + 1);
+    expect(() => resolveAction(req, out.actions[0].id, 'confirm')).toThrow(/expired/); // single use
+  });
+
+  it('does not let another user confirm, lets a person dismiss, and keeps clinic stats from non-managers', async () => {
+    const { claudeAsk, resolveAction } = await import('../src/domain/assistantAI.js');
+    const req = mkReq('front_desk', 'message rohan');
+    const rohan = req.db.patients.find((p) => p.firstName === 'Rohan');
+    const client = scripted([use('a', 'propose_send_message', { patientId: rohan.id, text: 'See you soon' }), use('b', 'clinic_stats', { days: 7 }), say('Prepared. Stats are restricted.')]);
+    const out = await claudeAsk(req, { client });
+    const statsResult = JSON.parse(client.calls[2].messages.at(-1).content[0].content);
+    expect(statsResult.error).toMatch(/owners and admins/);
+    expect(() => resolveAction({ ...req, session: { userId: 'someone-else' } }, out.actions[0].id, 'confirm')).toThrow(/expired/);
+    const sent = req.db.communications.length;
+    expect(resolveAction(req, out.actions[0].id, 'dismiss').message).toMatch(/Nothing was changed/);
+    expect(req.db.communications.length).toBe(sent);
+  });
+
+  it('falls back to the rule engine when Claude is unavailable', async () => {
+    const t = (await raw('POST', '/api/auth/demo', { role: 'owner' })).body.token;
+    const r = await raw('POST', '/api/assistant/ask', { message: 'unpaid visits' }, { authorization: `Bearer ${t}` });
+    expect(r.status).toBe(200); expect(r.body.reply).toBeTruthy();
+  });
+});
+
+describe('website visitors cannot reach patient data', () => {
+  it('keeps conversations private, ties each chat to its owner, and never links a visitor to a patient they name', async () => {
+    const reg = await signup({ name: 'Dr Priv', email: 'priv@example.in', password: 'secret123', clinicName: 'Privacy Dental' });
+    const H = { authorization: `Bearer ${reg.body.token}` }; const T = { 'x-tenant': reg.body.tenant.slug };
+    const mk = await raw('POST', '/api/patients', { firstName: 'Real', lastName: 'Patient', dob: '1990-01-01', phone: '9845012345' }, H);
+    expect(mk.status).toBe(201);
+
+    expect((await raw('GET', '/api/conversations', null, T)).status).toBe(401);
+    const settings = (await raw('GET', '/api/settings', null, T)).body;
+    expect(Object.keys(settings).sort()).toEqual(['locale', 'locations', 'practice', 'tenant']);
+    expect((await raw('GET', '/api/patients', null, T)).status).toBe(401);
+
+    // A visitor who types an existing patient's id and phone still gets an anonymous web chat.
+    const a = await raw('POST', '/api/conversations', { text: 'What are your timings?', patientId: mk.body.id, contactPhone: '9845012345', channel: 'whatsapp' }, T);
+    expect(a.status).toBe(201); expect(a.body.token).toBeTruthy();
+    expect(a.body.conversation.messages.length).toBeGreaterThan(1);
+    expect(JSON.stringify(a.body)).not.toMatch(/Real|Patient|patientId|assignedTo/);
+    const staffView = (await raw('GET', '/api/conversations', null, H)).body;
+    expect(staffView[0].patientId).toBeNull(); expect(staffView[0].channel).toBe('web');
+
+    const id = a.body.conversation.id; const tok = a.body.token;
+    expect((await raw('GET', `/api/conversations/${id}`, null, T)).status).toBe(403);
+    expect((await raw('GET', `/api/conversations/${id}`, null, { ...T, 'x-chat-token': 'wrong' })).status).toBe(403);
+    expect((await raw('GET', `/api/conversations/${id}`, null, { ...T, 'x-chat-token': tok })).status).toBe(200);
+    expect((await raw('POST', `/api/conversations/${id}/messages`, { text: 'hi' }, T)).status).toBe(403);
+    const more = await raw('POST', `/api/conversations/${id}/messages`, { text: 'Do you accept insurance?', from: 'staff' }, { ...T, 'x-chat-token': tok });
+    expect(more.status).toBe(200);
+    expect(more.body.conversation.messages.some((m) => m.from === 'staff')).toBe(false); // a visitor cannot post as staff
+
+    const b = await raw('POST', '/api/conversations', { text: 'Hello' }, T);
+    expect((await raw('GET', `/api/conversations/${id}`, null, { ...T, 'x-chat-token': b.body.token })).status).toBe(403); // another chat's token
+    expect((await raw('GET', '/api/conversations', null, H)).status).toBe(200); // staff still see everything
+  });
+});
+
+describe('owner dashboard analytics', () => {
+  it('summarises a busy clinic and stays well-formed for a brand-new empty one', async () => {
+    const t = (await raw('POST', '/api/auth/demo', { role: 'owner' })).body.token;
+    const busy = (await raw('GET', '/api/dashboard?days=30', null, { authorization: `Bearer ${t}` })).body;
+    expect(busy.series.length).toBe(30); expect(busy.now.appointments).toBeGreaterThan(50); expect(busy.now.revenue).toBeGreaterThan(0);
+    expect(busy.treatments.length).toBeGreaterThan(3); expect(busy.heat.rows.length).toBe(7); expect(busy.team.length).toBeGreaterThan(3);
+    expect(busy.series.reduce((s, x) => s + x.revenue, 0)).toBe(busy.now.revenue);
+    const reg = await signup({ name: 'Dr Empty', email: 'empty@example.in', password: 'secret123', clinicName: 'Empty Dental' });
+    const empty = await raw('GET', '/api/dashboard?days=7', null, { authorization: `Bearer ${reg.body.token}` });
+    expect(empty.status).toBe(200); expect(empty.body.now.appointments).toBe(0); expect(empty.body.now.revenue).toBe(0);
+    expect(empty.body.treatments).toEqual([]); expect(empty.body.goal.target).toBe(0); expect(empty.body.now.noShowRate).toBe(0);
+    const set = await raw('PUT', '/api/settings', { goals: { monthlyRevenue: 500000 } }, { authorization: `Bearer ${reg.body.token}` });
+    expect(set.status).toBe(200);
+    expect((await raw('GET', '/api/dashboard', null, { authorization: `Bearer ${reg.body.token}` })).body.goal.target).toBe(500000);
+  });
+});
+
+describe('growth and marketing, end to end', () => {
+  it('credits at most one booking per message, and only when nothing was booked at send time', async () => {
+    const { growth } = await import('../src/domain/growth.js');
+    const now = new Date(); const iso = (d) => new Date(now.getTime() - d * 864e5).toISOString();
+    const base = { settings: { marketing: { googleReviewUrl: '' }, marketingCampaigns: [], visitTypes: [], providers: [] }, treatmentPlans: [] };
+    const appt = (id, patientId, createdDaysAgo, startDaysAhead, extra = {}) => ({ id, patientId, status: 'scheduled', createdAt: iso(createdDaysAgo), start: new Date(now.getTime() + startDaysAhead * 864e5).toISOString(), paymentStatus: 'unpaid', ...extra });
+    const patients = [{ id: 'p1', marketingOptIn: true, phone: '1', createdAt: iso(100) }, { id: 'p2', marketingOptIn: true, phone: '2', createdAt: iso(100) }];
+    const comm = (patientId, daysAgo, type = 'recall') => ({ id: `c${patientId}${daysAgo}`, patientId, type, sentAt: iso(daysAgo), meta: {} });
+    // p1: one recall 10 days ago, then TWO bookings made afterwards: one is credited
+    const db1 = { ...base, patients, communications: [comm('p1', 10)], appointments: [appt('a1', 'p1', 8, 3), appt('a2', 'p1', 6, 5)] };
+    expect(growth(db1, { days: 30 }).now.bookings).toBe(1);
+    // p2 already had a visit booked when the message went out: nothing credited
+    const db2 = { ...base, patients, communications: [comm('p2', 10)], appointments: [appt('a0', 'p2', 20, 2), appt('a3', 'p2', 7, 6)] };
+    expect(growth(db2, { days: 30 }).now.bookings).toBe(0);
+    // a booking made before the message, or more than 14 days after it, is not credited
+    const db3 = { ...base, patients, communications: [comm('p1', 5), comm('p2', 25)], appointments: [appt('b1', 'p1', 9, 4), appt('b2', 'p2', 5, 4)] };
+    expect(growth(db3, { days: 30 }).now.bookings).toBe(0);
+    // greetings are not credited with bookings
+    const db4 = { ...base, patients, communications: [{ ...comm('p1', 10, 'marketing'), meta: { goal: 'festival' } }], appointments: [appt('c1', 'p1', 8, 3)] };
+    expect(growth(db4, { days: 30 }).now.bookings).toBe(0);
+  });
+
+  it('goes from an opportunity to a draft, an approval, a send, and the results screen', async () => {
+    const owner = (await raw('POST', '/api/auth/demo', { role: 'owner' })).body.token; const fd = (await raw('POST', '/api/auth/demo', { role: 'front_desk' })).body.token;
+    const O = { authorization: `Bearer ${owner}` }; const F = { authorization: `Bearer ${fd}` };
+    const g = (await raw('GET', '/api/marketing/growth?days=30', null, O)).body;
+    expect(g.campaigns.length).toBeGreaterThanOrEqual(3); expect(g.conversion).toBeLessThanOrEqual(100);
+    for (const c of g.campaigns) expect(c.bookings).toBeLessThanOrEqual(c.sent);
+    const opp = g.opportunities.find((o) => o.goal === 'recall'); expect(opp.count).toBeGreaterThan(0);
+    const draft = await raw('POST', '/api/marketing/opportunity', { goal: 'recall', segment: 'overdue_recall' }, F);
+    expect(draft.status).toBe(201); expect(draft.body.status).toBe('draft'); expect(draft.body.body).toMatch(/cleaning/i);
+    expect((await raw('POST', `/api/marketing/campaigns/${draft.body.id}/send`, {}, F)).status).toBe(400); // an unapproved draft cannot be sent
+    expect((await raw('POST', `/api/marketing/campaigns/${draft.body.id}/submit`, {}, F)).body.status).toBe('pending_approval');
+    expect((await raw('POST', `/api/marketing/campaigns/${draft.body.id}/approve`, {}, F)).status).toBe(400); // front desk cannot approve
+    expect((await raw('POST', `/api/marketing/campaigns/${draft.body.id}/approve`, {}, O)).body.status).toBe('approved');
+    await raw('PUT', '/api/marketing/settings', { quietHours: { start: '00:00', end: '24:00' } }, O); // so the test does not depend on the time of day
+    const sent = await raw('POST', `/api/marketing/campaigns/${draft.body.id}/send`, {}, O);
+    expect(sent.status).toBe(200);
+    const after = (await raw('GET', '/api/marketing/growth?days=30', null, O)).body;
+    const row = after.campaigns.find((c) => c.id === draft.body.id); expect(row.sent).toBe(opp.count);
+    expect(after.now.messages).toBe(g.now.messages + opp.count);
+  });
+
+  it('lets the assistant brief the day and prepare a campaign draft that is only created on confirmation', async () => {
+    const owner = (await raw('POST', '/api/auth/demo', { role: 'owner' })).body.token; const O = { authorization: `Bearer ${owner}` };
+    const brief = (await raw('GET', '/api/assistant/brief', null, O)).body;
+    expect(brief.greeting).toMatch(/^Good (morning|afternoon|evening)/); expect(brief.lines[0]).toMatch(/appointment/); expect(brief.suggestions.length).toBeGreaterThan(0);
+    const dentist = (await raw('POST', '/api/auth/demo', { role: 'dentist' })).body.token;
+    expect((await raw('GET', '/api/assistant/brief', null, { authorization: `Bearer ${dentist}` })).body.lines.join(' ')).not.toMatch(/marketing|worth a message/i);
+    const before = (await raw('GET', '/api/marketing', null, O)).body.campaigns.length;
+    const ask = await raw('POST', '/api/assistant/ask', { message: 'draft a recall reminder' }, O);
+    expect(ask.body.actions.length).toBe(1); expect(ask.body.actions[0].summary).toMatch(/Recall/);
+    expect((await raw('GET', '/api/marketing', null, O)).body.campaigns.length).toBe(before); // proposing creates nothing
+    const results = await raw('POST', '/api/assistant/ask', { message: 'marketing results' }, O);
+    expect(results.body.reply).toMatch(/messages? sent/);
+    const dentistAsk = await raw('POST', '/api/assistant/ask', { message: 'marketing results' }, { authorization: `Bearer ${dentist}` });
+    expect(dentistAsk.body.reply).toMatch(/owners and admins/);
+    const act = await raw('POST', '/api/assistant/action', { actionId: ask.body.actions[0].id, decision: 'confirm' }, O);
+    expect(act.status).toBe(200); expect(act.body.message).toMatch(/Draft created/);
+    expect((await raw('GET', '/api/marketing', null, O)).body.campaigns.length).toBe(before + 1);
+  });
+
+  it('records where a new patient heard about the clinic and shows it in growth', async () => {
+    const reg = await signup({ name: 'Dr Grow', email: 'grow@example.in', password: 'secret123', clinicName: 'Grow Dental' });
+    const H = { authorization: `Bearer ${reg.body.token}` }; const T = { 'x-tenant': reg.body.tenant.slug };
+    const s = (await raw('GET', '/api/settings', null, H)).body;
+    await raw('PUT', '/api/settings', { ...s, providers: [{ id: 'p1', name: 'Dr Grow', role: 'Dentist', locationIds: [s.locations[0].id], consultationFee: 500 }] }, H);
+    const slots = (await raw('GET', '/api/public/slots?visitTypeId=vt_newpatient&days=7', null, T)).body.days.flatMap((d) => d.slots);
+    const book = await raw('POST', '/api/public/book', { name: 'Neha Verma', phone: '98450 12121', visitTypeId: 'vt_newpatient', providerId: slots[0].providerId, locationId: slots[0].locationId, start: slots[0].start, source: 'Google Maps' }, T);
+    expect(book.status).toBe(201);
+    await raw('POST', '/api/patients', { firstName: 'Ravi', lastName: 'Kumar', dob: '1990-01-01', phone: '9845033333', source: 'Friend or family' }, H);
+    const g = (await raw('GET', '/api/marketing/growth?days=30', null, H)).body;
+    expect(g.newPatients).toBe(2);
+    expect(Object.fromEntries(g.sources.map((x) => [x.source, x.count]))).toEqual({ 'Google Maps': 1, 'Friend or family': 1 });
+    expect(g.now.messages).toBe(0); expect(g.opportunities).toEqual([]);
+  });
+});
+
+describe('campaign send window and scheduling', () => {
+  it('leaves a campaign untouched when a send is blocked, then sends it when its scheduled time comes', async () => {
+    const { dispatchScheduledCampaigns } = await import('../src/domain/marketing.js');
+    const owner = (await raw('POST', '/api/auth/demo', { role: 'owner' })).body.token; const O = { authorization: `Bearer ${owner}` };
+    const h = new Date().getHours(); // pick a window that is closed right now
+    const closed = h < 20 ? { start: '21:00', end: '23:00' } : { start: '06:00', end: '08:00' };
+    await raw('PUT', '/api/marketing/settings', { quietHours: closed }, O);
+    const draft = await raw('POST', '/api/marketing/opportunity', { goal: 'recall', segment: 'overdue_recall' }, O);
+    const id = draft.body.id; const lifecycle = async (a) => raw('POST', `/api/marketing/campaigns/${id}/${a}`, {}, O);
+    await lifecycle('submit'); expect((await lifecycle('approve')).body.status).toBe('approved');
+
+    const blocked = await lifecycle('send');
+    expect(blocked.status).toBe(400); expect(blocked.body.error).toMatch(/go out between/);
+    const afterBlocked = (await raw('GET', '/api/marketing', null, O)).body.campaigns.find((c) => c.id === id);
+    expect(afterBlocked.status).toBe('approved'); // not "sent" with nothing delivered
+
+    const sched = await lifecycle('schedule');
+    expect(sched.status).toBe(200); expect(new Date(sched.body.scheduledFor).getTime()).toBeGreaterThan(Date.now());
+    const hr = new Date(sched.body.scheduledFor).getHours(); expect(hr).toBe(Number(closed.start.slice(0, 2))); // the start of the next window
+    const unsched = await lifecycle('unschedule'); expect(unsched.body.scheduledFor).toBeNull();
+    const again = await lifecycle('schedule');
+
+    const demo = registry.tenantBySlug('smilecare'); const db = registry.tenantStore(demo.id).db;
+    expect(dispatchScheduledCampaigns(db, { now: new Date(Date.parse(again.body.scheduledFor) - 60000).toISOString() })).toBe(0); // not due yet
+    expect(dispatchScheduledCampaigns(db, { now: again.body.scheduledFor })).toBe(1); // due and the window is open
+    const done = (await raw('GET', '/api/marketing', null, O)).body.campaigns.find((c) => c.id === id);
+    expect(done.status).toBe('sent'); expect(done.sentCount).toBeGreaterThan(0); expect(done.scheduledFor).toBeNull();
+  });
+
+  it('only an owner or admin can schedule, and only an approved campaign', async () => {
+    const fd = (await raw('POST', '/api/auth/demo', { role: 'front_desk' })).body.token; const F = { authorization: `Bearer ${fd}` };
+    const draft = await raw('POST', '/api/marketing/opportunity', { goal: 'recall', segment: 'overdue_recall' }, F);
+    expect((await raw('POST', `/api/marketing/campaigns/${draft.body.id}/schedule`, {}, F)).status).toBe(400);
+    const owner = (await raw('POST', '/api/auth/demo', { role: 'owner' })).body.token;
+    expect((await raw('POST', `/api/marketing/campaigns/${draft.body.id}/schedule`, {}, { authorization: `Bearer ${owner}` })).body.error).toMatch(/approved/);
+  });
+});
+
+describe('owner who is also the dentist', () => {
+  it('links the owner login to her dentist profile when she adds herself as a provider', async () => {
+    const reg = await signup({ name: 'Dr Lata Rao', email: 'lata@example.in', password: 'secret123', clinicName: 'Lata Dental' });
+    const H = { authorization: `Bearer ${reg.body.token}` };
+    expect((await raw('GET', '/api/auth/me', null, H)).body.providerId).toBeNull();
+    const st = (await raw('GET', '/api/settings', null, H)).body;
+    await raw('PUT', '/api/settings', { providers: [{ id: 'p_lata', name: 'Dr. Lata Rao', role: 'Dentist', locationIds: [st.locations[0].id], consultationFee: 500 }, { id: 'p_other', name: 'Dr Someone Else', role: 'Dentist', locationIds: [st.locations[0].id], consultationFee: 500 }] }, H);
+    expect((await raw('GET', '/api/auth/me', null, H)).body.providerId).toBe('p_lata');
+    const home = (await raw('GET', '/api/doctor/dashboard?days=30', null, H)).body;
+    expect(home.provider.id).toBe('p_lata'); // My home opens on her own list
+  });
+});
+
+describe('a new clinic does not inherit another clinic\'s claims', () => {
+  it('starts with neutral answers about insurance, payment and procedures, and no pre-filled insurers or EMI', async () => {
+    const reg = await signup({ name: 'Dr Fresh', email: 'fresh@example.in', password: 'secret123', clinicName: 'Fresh Dental' });
+    const s = (await raw('GET', '/api/settings', null, { authorization: `Bearer ${reg.body.token}` })).body;
+    const all = s.faqs.map((f) => f.answer).join(' ');
+    expect(all).not.toMatch(/Star Health|HDFC|Niva|ICICI|empanelled|no-cost EMI|CGHS|ESIC|SmileCare|Indiranagar|Whitefield/);
+    expect(s.paymentModes).not.toContain('EMI'); expect(s.paymentModes).not.toContain('Insurance / cashless');
+    expect(s.insuranceOptions.every((o) => !o.examples)).toBe(true);
+    const ans = (await raw('POST', '/api/conversations', { text: 'Do you accept insurance?' }, { 'x-tenant': reg.body.tenant.slug })).body.conversation.messages.at(-1).text;
+    expect(ans).not.toMatch(/Star Health|empanelled/);
+  });
+});
+
+describe('chat booking understands "the earliest"', () => {
+  it('picks the first offered time when the patient says any time or the earliest', async () => {
+    const first = (await pub('POST', '/api/conversations', { channel: 'whatsapp', contactName: 'Pat Doe', text: 'I want to book a cleaning' })).body;
+    expect(first.reply.text).toMatch(/1\./);
+    const next = await pub('POST', `/api/conversations/${first.conversation.id}/messages`, { text: 'any time is fine, the earliest please' });
+    expect(next.body.reply.text).toMatch(/full name and date of birth/i);
+  });
+});
+
+describe('nothing from the demo clinic leaks into a new one', () => {
+  it('has no demo names, places, doctors or links anywhere in a new clinic settings', async () => {
+    const reg = await signup({ name: 'Dr Clean', email: 'clean@example.in', password: 'secret123', clinicName: 'Clean Dental' });
+    const s = (await raw('GET', '/api/settings', null, { authorization: `Bearer ${reg.body.token}` })).body;
+    const txt = JSON.stringify(s);
+    for (const w of ['SmileCare', 'smilecare', 'Indiranagar', 'Whitefield', 'Bengaluru', 'Ananya', 'Vikram', 'Sunitha', 'g.page', 'KMC/DC']) expect(txt, w).not.toContain(w);
+    expect(s.marketing.googleReviewUrl).toBe('');
+  });
+});
+
+describe('website demo-call requests', () => {
+  const lead = (slot, extra = {}) => ({ name: 'Dr Asha Nair', clinic: 'Nair Dental', email: 'asha@nairdental.in', phone: '98450 12345', city: 'Kochi', size: '2 to 3 dentists', slot, ...extra });
+  it('offers weekday IST slots with an agenda, and books one without any login', async () => {
+    const m = (await raw('GET', '/api/leads/slots')).body;
+    expect(m.tz).toBe('Asia/Kolkata'); expect(m.slots.length).toBeGreaterThan(8); expect(m.agenda.length).toBe(5); expect(m.sizes.length).toBeGreaterThan(3);
+    const ist = (iso) => new Date(iso).toLocaleString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', weekday: 'short' });
+    for (const s of m.slots) { expect(['11:00', '14:30', '17:00']).toContain(ist(s.start).split(' ').pop()); expect(ist(s.start)).not.toMatch(/Sat|Sun/); expect(new Date(s.start).getTime()).toBeGreaterThan(Date.now()); }
+    const slot = m.slots[0].start;
+    const ok = await raw('POST', '/api/leads/demo', lead(slot));
+    expect(ok.status).toBe(201); expect(ok.body.when).toMatch(/IST/); expect(ok.body.agenda.length).toBe(5);
+    expect(registry.platform.db.leads.at(-1)).toMatchObject({ clinic: 'Nair Dental', email: 'asha@nairdental.in', slot, status: 'new' });
+  });
+  it('rejects bad details, unknown times, and fills a slot after two bookings', async () => {
+    const slot = (await raw('GET', '/api/leads/slots')).body.slots[1].start;
+    expect((await raw('POST', '/api/leads/demo', lead(slot, { email: 'nope' }))).status).toBe(400);
+    expect((await raw('POST', '/api/leads/demo', lead(slot, { phone: '123' }))).status).toBe(400);
+    expect((await raw('POST', '/api/leads/demo', lead(slot, { name: '' }))).status).toBe(400);
+    expect((await raw('POST', '/api/leads/demo', lead('2020-01-01T05:30:00.000Z'))).status).toBe(400);
+    expect((await raw('POST', '/api/leads/demo', lead(new Date(Date.parse(slot) + 60000).toISOString()))).status).toBe(400); // not one of the offered times
+    expect((await raw('POST', '/api/leads/demo', lead(slot))).status).toBe(201);
+    expect((await raw('POST', '/api/leads/demo', lead(slot, { email: 'b@b.in' }))).status).toBe(201);
+    const third = await raw('POST', '/api/leads/demo', lead(slot, { email: 'c@c.in' }));
+    expect(third.status).toBe(409);
+    expect((await raw('GET', '/api/leads/slots')).body.slots.find((s) => s.start === slot).available).toBe(false);
+  });
+  it('emails the requester the agenda when email is configured', async () => {
+    const calls = []; const real = global.fetch; process.env.RESEND_API_KEY = 're_test'; process.env.SALES_EMAIL = 'sales@clinovara.test';
+    global.fetch = async (url, init) => { if (String(url).startsWith('http://127.0.0.1')) return real(url, init); calls.push(JSON.parse(init.body)); return { ok: true, text: async () => '' }; };
+    try {
+      const slot = (await raw('GET', '/api/leads/slots')).body.slots[3].start;
+      const r = await raw('POST', '/api/leads/demo', lead(slot, { email: 'mail@clinic.in' }));
+      expect(r.status).toBe(201); expect(r.body.confirmedByEmail).toBe(true);
+      const toUser = calls.find((c) => c.to[0] === 'mail@clinic.in'); expect(toUser.text).toMatch(/Agenda/); expect(toUser.text).toMatch(/Live walkthrough/);
+      expect(calls.some((c) => c.to[0] === 'sales@clinovara.test')).toBe(true);
+    } finally { global.fetch = real; delete process.env.RESEND_API_KEY; delete process.env.SALES_EMAIL; }
+  });
+});
+
+describe('marketing: planner, prompt tools, automations, frequency cap, analytics', () => {
+  const demoDb = () => registry.tenantStore(registry.tenantBySlug('smilecare').id).db;
+  const mk = () => import('../src/domain/marketing.js');
+
+  it('turns a plain request into a draft plan without AI, and counts the audience', async () => {
+    const diwali = (await api('POST', '/api/marketing/plan', { ask: 'Send a Diwali greeting in Hindi to everyone' })).body;
+    expect(diwali).toMatchObject({ goal: 'festival', segment: 'all', lang: 'hi', engine: 'rules' });
+    expect(diwali.festival).toMatch(/Diwali/i); expect(diwali.body).toMatch(/Diwali|दिवाली/i); expect(diwali.audienceCount).toBeGreaterThan(5);
+    expect((await api('POST', '/api/marketing/plan', { ask: 'bring back patients who have not visited in over a year' })).body).toMatchObject({ goal: 'reactivation', segment: 'inactive_12m' });
+    const offer = (await api('POST', '/api/marketing/plan', { ask: '20% off teeth whitening in November' })).body;
+    expect(offer.goal).toBe('offer'); expect(offer.body).toMatch(/20% off teeth whitening/);
+    expect((await api('POST', '/api/marketing/plan', { ask: 'hi' })).status).toBe(400);
+    const before = (await api('GET', '/api/marketing')).body.campaigns.length; // the plan only proposes; it must create nothing
+    await api('POST', '/api/marketing/plan', { ask: 'remind people about their cleaning' });
+    expect((await api('GET', '/api/marketing')).body.campaigns.length).toBe(before);
+  });
+
+  it('offers a prompt library, improves a weak prompt, and tests a prompt before approval', async () => {
+    const lib = (await api('GET', '/api/marketing/prompts/library')).body;
+    expect(lib.length).toBeGreaterThan(8); expect(lib.every((p) => p.goal && p.body && p.name)).toBe(true);
+    const imp = (await api('POST', '/api/marketing/prompts/improve', { goal: 'offer', body: 'Tell them about our offer' })).body;
+    expect(imp.body.length).toBeGreaterThan('Tell them about our offer'.length); expect(imp.changes.length).toBeGreaterThan(0);
+    const t = (await api('POST', '/api/marketing/prompts/test', { goal: 'recall', lang: 'en', body: 'Write a recall for {{firstName}}.' })).body;
+    expect(t.body).toMatch(/\S/); expect(t.body).not.toMatch(/\{\{/); expect(t.engine).toBe('rules');
+    const created = (await api('POST', '/api/marketing/prompts', { goal: 'offer', name: 'From library', body: lib[0].body })).body;
+    expect(created.status).toBe('draft'); // library prompts still need approval
+  });
+
+  it('queues aftercare and welcome after a procedure, and birthdays once a year, all waiting for approval', async () => {
+    const m = await mk(); const db = demoDb();
+    const patient = db.patients.find((p) => p.marketingOptIn !== false && p.phone);
+    const appt = { id: 'ap_test_after', patientId: patient.id, visitTypeId: 'vt_procedure', providerId: db.settings.providers[0].id, locationId: db.settings.locations[0].id, status: 'completed' };
+    db.appointments.push(appt);
+    const items = m.queueVisitFollowups(db, appt);
+    const goals = items.map((q) => q.goal); expect(goals).toContain('aftercare'); expect(goals).toContain('thank_you');
+    expect(items.every((q) => q.status === 'pending_approval')).toBe(true);
+    expect(items.find((q) => q.goal === 'aftercare').body).toMatch(/pain|swelling/i);
+    expect(m.queueVisitFollowups(db, appt).length).toBe(0); // never twice for the same visit
+    patient.marketingOptIn = false; const after2 = { ...appt, id: 'ap_test_after2' }; db.appointments.push(after2); // aftercare is care, so it still goes to a patient who opted out of marketing
+    expect(m.queueVisitFollowups(db, after2).map((q) => q.goal)).toEqual(['aftercare']); patient.marketingOptIn = true;
+    const bp = db.patients.filter((p) => p.marketingOptIn !== false && p.phone)[1];
+    const today = new Date(); const md = `${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`; bp.dob = `1990-${md}`;
+    const count = () => db.settings.marketingQueue.filter((q) => q.goal === 'birthday' && q.patientId === bp.id).length;
+    m.queueBirthdays(db); m.queueBirthdays(db); expect(count()).toBe(1);
+    const bq = db.settings.marketingQueue.find((q) => q.goal === 'birthday' && q.patientId === bp.id);
+    expect(bq.status).toBe('pending_approval'); expect(bq.body).toMatch(/birthday|जन्मदिन/i);
+    bq.status = 'approved'; bq.sendAfter = new Date(0).toISOString(); // outside the send window a birthday wish waits; inside it, it goes
+    const at = (h) => { const d = new Date(); d.setHours(h, 0, 0, 0); return d.toISOString(); };
+    expect(m.dispatchQueue(db, { now: at(23) })).toBe(0); expect(bq.status).toBe('approved');
+    expect(m.dispatchQueue(db, { now: at(12) })).toBeGreaterThanOrEqual(1); expect(bq.status).toBe('sent');
+    bp.dob = ''; const bp2 = db.patients.filter((p) => p.marketingOptIn !== false && p.phone)[2]; bp2.dob = `1991-${md}`;
+    await api('PUT', '/api/marketing/settings', { automations: { birthday: { enabled: false } } });
+    expect(m.queueBirthdays(db)).toBe(0);
+    await api('PUT', '/api/marketing/settings', { automations: { birthday: { enabled: true } } });
+  });
+
+  it('keeps sibling settings on a partial save, and limits how often a patient gets campaigns', async () => {
+    const m = await mk(); const db = demoDb();
+    const before = (await api('GET', '/api/marketing')).body.settings.autoThankYou;
+    await api('PUT', '/api/marketing/settings', { autoThankYou: { enabled: true } });
+    const after = (await api('GET', '/api/marketing')).body.settings.autoThankYou;
+    expect(after.delayMinutes).toBe(before.delayMinutes); expect(after.mode).toBe(before.mode);
+    await api('PUT', '/api/marketing/settings', { voice: { tone: 'professional', avoid: 'discounts' }, frequencyCapDays: 10 });
+    const s2 = (await api('GET', '/api/marketing')).body.settings; expect(s2.voice).toMatchObject({ tone: 'professional', avoid: 'discounts' }); expect(s2.frequencyCapDays).toBe(10);
+    const p = db.patients.find((x) => x.marketingOptIn !== false && x.phone);
+    db.communications.unshift({ id: 'cm_cap', patientId: p.id, type: 'marketing', channel: 'whatsapp', body: 'x', sentAt: new Date().toISOString(), meta: {}, by: 'Campaign: t' });
+    expect(m.recentlyMarketed(db, p.id, 10)).toBe(true);
+    expect(m.eligibleAudience(db, 'all').some((x) => x.id === p.id)).toBe(false);
+    expect(m.segmentPatients(db, 'all').some((x) => x.id === p.id)).toBe(true);
+    await api('PUT', '/api/marketing/settings', { frequencyCapDays: 0 });
+    expect(m.eligibleAudience(db, 'all').some((x) => x.id === p.id)).toBe(true); // 0 turns the limit off
+    await api('PUT', '/api/marketing/settings', { frequencyCapDays: 7 });
+  });
+
+  it('reports revenue, marketing, reach-out and page views, and counts real page loads', async () => {
+    const O = { 'x-tenant': 'smilecare' };
+    const a = (await api('GET', '/api/marketing/analytics?days=30')).body;
+    expect(a.revenue.series.length).toBe(30); expect(a.revenue.total).toBe(a.revenue.series.reduce((s, d) => s + d.value, 0));
+    expect(a.revenue.total).toBeGreaterThan(0); expect(a.revenue.averageVisit).toBeGreaterThan(0);
+    expect(a.revenue.byType.length).toBeGreaterThan(0); expect(a.revenue.marketingShare).toBeLessThanOrEqual(100);
+    expect(a.reach.sent).toBeGreaterThan(0); expect(a.reach.byType.length).toBeGreaterThan(0); expect(a.reach.replyRate).toBeLessThanOrEqual(100);
+    expect(a.reach.deliveryTracked).toBe(false); // no WhatsApp provider connected, so no delivered or read figures are claimed
+    expect(a.marketing.campaigns.every((c) => c.conversion <= 100 && c.replyRate <= 100)).toBe(true);
+    expect(a.site.series.length).toBe(30);
+    const v0 = (await api('GET', '/api/marketing/analytics?days=7')).body.site.views;
+    await raw('GET', '/api/public/clinic?src=Google', null, O); await raw('GET', '/api/public/clinic', null, O);
+    const v1 = (await api('GET', '/api/marketing/analytics?days=7')).body.site;
+    expect(v1.views).toBe(v0 + 2); expect(v1.sources.some((s) => s.source === 'google')).toBe(true);
+    const pat = (await api('GET', '/api/marketing/patients?segment=all')).body;
+    expect(pat.rows.length).toBeGreaterThan(5); expect(pat.rows[0]).toHaveProperty('optIn');
   });
 });

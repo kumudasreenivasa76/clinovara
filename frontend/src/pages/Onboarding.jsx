@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { IconCheck, IconCircle, IconArrowRight, IconArrowLeft, IconRocket, IconPlus, IconTrash, IconCopy, IconExternalLink, IconUpload, IconSparkles } from '@tabler/icons-react';
+import { INDIA } from '../lib/places.js';
 import { get, put, post } from '../lib/api.js';
 import { Card, Body, Field, useAction, Pill, useToast } from '../components/ui.jsx';
 import { fmtMoney } from '../lib/format.js';
 import { navigate } from '../App.jsx';
 
 const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
-const STATES = ['Andhra Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Delhi', 'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Odisha', 'Punjab', 'Rajasthan', 'Tamil Nadu', 'Telangana', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal', 'Other'];
+const TIMEZONES = ['Asia/Kolkata', 'Asia/Dubai', 'Asia/Singapore', 'Asia/Dhaka', 'Asia/Kathmandu', 'Asia/Colombo', 'Europe/London', 'America/New_York', 'America/Chicago', 'America/Los_Angeles', 'Australia/Sydney'];
+const STATES = Object.keys(INDIA);
 
 /** Guided setup. Each step edits the same settings the app uses; the checklist on the right is computed from real data. */
 export default function Onboarding({ session }) {
@@ -17,7 +19,7 @@ export default function Onboarding({ session }) {
   const [run, busy] = useAction();
   const toast = useToast();
   const load = async () => { const [o, st] = await Promise.all([get('/api/onboarding'), get('/api/settings')]); setOb(o); setS(st); return o; };
-  useEffect(() => { load().then((o) => { const first = o.steps.findIndex((x) => !x.done); setI(first < 0 ? o.steps.length - 1 : first); }); }, []); // eslint-disable-line
+  useEffect(() => { load().then((o) => { const want = o.steps.findIndex((x) => x.key === new URLSearchParams(window.location.hash.split('?')[1] || '').get('step')); const first = o.steps.findIndex((x) => !x.done); setI(want >= 0 ? want : first < 0 ? o.steps.length - 1 : first); }); }, []); // eslint-disable-line
   if (!ob || !s) return <div className="main"><div className="skeleton" /></div>;
   const step = ob.steps[i];
   const up = (p) => setS({ ...s, ...p });
@@ -30,14 +32,18 @@ export default function Onboarding({ session }) {
   return (
     <div className="onboard">
       <aside className="onboard-side">
-        <div className="row" style={{ padding: '4px 8px 14px' }}><IconRocket size={20} className="muted" /><div><div className="strong">Set up {me.tenant.name}</div><div className="tiny muted">{ob.percent}% ready · trial until {new Date(ob.tenant.trialEndsAt).toLocaleDateString('en-IN')}</div></div></div>
-        <div className="steps" style={{ margin: '0 8px 12px' }}>{ob.steps.filter((x) => !x.optional).map((x) => <span key={x.key} className={x.done ? 'done' : ''} />)}</div>
-        {ob.steps.map((x, j) => <button key={x.key} className={`onboard-step ${j === i ? 'active' : ''}`} onClick={() => setI(j)}>{x.done ? <IconCheck size={16} style={{ color: 'var(--good)' }} /> : <IconCircle size={16} className="faint" />}<div><div className="small strong">{j + 1}. {x.title}</div><div className="tiny muted">{x.hint}</div></div></button>)}
+        <div className="row" style={{ padding: '4px 8px 14px' }}><IconRocket size={20} className="muted" /><div><div className="strong">Set up {me.tenant.name}</div><div className="tiny muted">{ob.percent}% of essentials · trial until {new Date(ob.tenant.trialEndsAt).toLocaleDateString('en-IN')}</div></div></div>
+        <div className="steps" style={{ margin: '0 8px 12px' }}>{ob.steps.filter((x) => x.core).map((x) => <span key={x.key} className={x.done ? 'done' : ''} />)}</div>
+        {[['Essential', (x) => x.core], ['Finish later (optional)', (x) => !x.core]].map(([title, pick]) => <React.Fragment key={title}>
+          <div className="tiny muted strong" style={{ padding: '10px 8px 4px', textTransform: 'uppercase', letterSpacing: '.04em' }}>{title}</div>
+          {ob.steps.map((x, j) => pick(x) && <button key={x.key} className={`onboard-step ${j === i ? 'active' : ''}`} onClick={() => setI(j)}>{x.done ? <IconCheck size={16} style={{ color: 'var(--good)' }} /> : <IconCircle size={16} className="faint" />}<div><div className="small strong">{x.title} <span className="tiny muted">~{x.minutes} min</span></div><div className="tiny muted">{x.hint}</div></div></button>)}
+        </React.Fragment>)}
         <div className="divider" />
+        <a className="btn ghost sm" href="#/onboarding">Back to quick setup</a>
         <a className="btn ghost sm" href="#/dashboard" style={{ justifyContent: 'flex-start' }}>Skip to the app for now</a>
       </aside>
       <main className="onboard-main">
-        <div className="page-head"><div><h1>{i + 1}. {step.title}</h1><p>{step.hint}</p></div><Pill tone={step.done ? 'good' : 'warn'}>{step.done ? 'Complete' : 'Needs attention'}</Pill></div>
+        <div className="page-head"><div><h1>{step.core ? `Step ${ob.steps.filter((x) => x.core).findIndex((x) => x.key === step.key) + 1} of ${ob.steps.filter((x) => x.core).length}: ` : ''}{step.title}</h1><p>{step.hint}</p></div><Pill tone={step.done ? 'good' : 'warn'}>{step.done ? 'Complete' : 'Needs attention'}</Pill></div>
         <div className="grid" style={{ gridTemplateColumns: 'minmax(0, 1fr) 280px' }}>
           <div className="col gap-16">
             {step.key === 'profile' && <Card><Body className="col">
@@ -51,6 +57,22 @@ export default function Onboarding({ session }) {
                 <Field label="City"><input className="input" value={s.practice.city || ''} onChange={(e) => up({ practice: { ...s.practice, city: e.target.value } })} /></Field>
                 <Field label="State"><select className="input" value={s.practice.state || ''} onChange={(e) => up({ practice: { ...s.practice, state: e.target.value } })}><option value="">Choose…</option>{STATES.map((x) => <option key={x}>{x}</option>)}</select></Field>
               </div>
+              <div className="divider" />
+              <div className="small strong">Business details</div>
+              <div className="grid three">
+                <Field label="Legal business name"><input className="input" value={s.practice.legalName || ''} onChange={(e) => up({ practice: { ...s.practice, legalName: e.target.value } })} /></Field>
+                <Field label="Clinic address"><input className="input" value={s.practice.address || ''} onChange={(e) => up({ practice: { ...s.practice, address: e.target.value } })} /></Field>
+                <Field label="ZIP / postal code"><input className="input" value={s.practice.zip || ''} onChange={(e) => up({ practice: { ...s.practice, zip: e.target.value } })} /></Field>
+                <Field label="Primary dentist name"><input className="input" value={s.practice.primaryDentist || ''} onChange={(e) => up({ practice: { ...s.practice, primaryDentist: e.target.value } })} /></Field>
+                <Field label="Number of dentists"><input className="input" type="number" min="0" value={s.practice.dentistCount ?? ''} onChange={(e) => up({ practice: { ...s.practice, dentistCount: e.target.value === '' ? '' : Number(e.target.value) } })} /></Field>
+                <Field label="Number of dental chairs"><input className="input" type="number" min="0" value={s.practice.chairCount ?? ''} onChange={(e) => up({ practice: { ...s.practice, chairCount: e.target.value === '' ? '' : Number(e.target.value) } })} /></Field>
+                <Field label="Number of locations"><input className="input" type="number" min="1" value={s.practice.locationCount ?? ''} onChange={(e) => up({ practice: { ...s.practice, locationCount: e.target.value === '' ? '' : Number(e.target.value) } })} /></Field>
+                <Field label="Time zone"><select className="input" value={s.locale?.timezone || 'Asia/Kolkata'} onChange={(e) => up({ locale: { ...s.locale, timezone: e.target.value } })}>{TIMEZONES.map((z) => <option key={z}>{z}</option>)}</select></Field>
+                <Field label="Business registration number"><input className="input" value={s.practice.businessRegistrationNumber || ''} onChange={(e) => up({ practice: { ...s.practice, businessRegistrationNumber: e.target.value } })} /></Field>
+              </div>
+              <Field label="Clinic logo" hint="PNG or JPG, up to 300 KB. Working days and hours are set per branch in the next step.">
+                <div className="row gap-12">{s.practice.logo && <img src={s.practice.logo} alt="Clinic logo" style={{ height: 48, borderRadius: 6 }} />}<input type="file" accept="image/png,image/jpeg" onChange={(e) => { const file = e.target.files[0]; if (!file) return; if (file.size > 300 * 1024) return toast('Logo must be under 300 KB'); const r = new FileReader(); r.onload = () => up({ practice: { ...s.practice, logo: r.result } }); r.readAsDataURL(file); }} />{s.practice.logo && <button className="btn sm ghost" onClick={() => up({ practice: { ...s.practice, logo: '' } })}>Remove</button>}</div>
+              </Field>
               <div className="divider" />
               <div className="small strong">Registrations</div>
               <div className="grid three">
@@ -141,7 +163,7 @@ export default function Onboarding({ session }) {
             {step.key === 'marketing' && <MarketingStep onChange={load} />}
 
             {step.key === 'integrations' && <Card title="Integrations (optional)"><Body className="col">
-              <div className="small muted">Connect your EHR over FHIR, add webhooks, or set up the WhatsApp Business API and ABDM HIP details under Settings → Integrations. You can go live without these; messages stay in the outbox until a provider is connected.</div>
+              <div className="small muted">Settings → Integrations shows which connections are live (email, SMS, WhatsApp, Claude AI) and what turns the others on, plus calendar feeds and webhooks. EHR and ABDM are tucked under Advanced for when you are ready. You can go live without any of these; messages stay in the outbox until a provider is connected.</div>
               <a className="btn" href="#/settings?tab=integrations" style={{ alignSelf: 'flex-start' }}>Open Integrations <IconExternalLink size={14} /></a>
             </Body></Card>}
 
@@ -153,8 +175,8 @@ export default function Onboarding({ session }) {
                 <div className="card soft" style={{ padding: 12 }}><div className="small strong">Make a test booking</div><div className="tiny muted">Book yourself in from Schedule, then check in at the kiosk and watch the display update.</div><a className="btn sm mt-8" href="#/schedule">Open Schedule</a></div>
               </div>
               <div className="callout small">Before real patients: put the kiosk in the browser's kiosk/full-screen mode, set the display TV to the board URL, and share the WhatsApp number on Google Maps and your signboard. Under the DPDP Act, keep the consent text in Settings → Rules & kiosk current.</div>
-              <button className="btn primary lg" disabled={busy || ob.completed} onClick={() => run(async () => { await post('/api/onboarding/complete'); await refresh(); navigate('#/dashboard'); }, 'Your clinic is live')}><IconRocket size={18} />{ob.completed ? 'Already live' : `Launch ${me.tenant.name}`}</button>
-              {ob.percent < 100 && <div className="tiny muted">{ob.percent}% of the checklist is done. You can launch now and finish the rest from Settings.</div>}
+              <button className="btn primary lg" disabled={busy || ob.completed} onClick={() => run(async () => { await post('/api/onboarding/complete'); await refresh(); navigate('#/'); }, 'Your clinic is live')}><IconRocket size={18} />{ob.completed ? 'Already live' : `Launch ${me.tenant.name}`}</button>
+              {ob.percent < 100 && <div className="tiny muted">{ob.percent}% of the checklist is done. You can launch now and finish the optional steps later from the Finish setup banner.</div>}
             </Body></Card>}
 
             <div className="row between">

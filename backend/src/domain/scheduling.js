@@ -32,12 +32,32 @@ function blocked(db, providerId, locationId, start, end) {
   return (db.blocks || []).some((b) => b.providerId === providerId && (!b.locationId || !locationId || b.locationId === locationId) && overlaps(start, end, b.start, b.end));
 }
 
-export function slotsForDay(db, { date, visitTypeId, providerId = null, locationId = null, from = nowIso(), durationMin = null }) {
+/** Clinic-wide booking rules the owner sets in Settings → Booking rules (all optional, safe defaults). */
+export function bookingRules(db) {
+  return { bufferMin: 0, minLeadHours: 0, maxAdvanceDays: 60, onlineBooking: true, showFees: true, ...(db.settings.practice.booking || {}) };
+}
+/** A dentist's own working hours (if set) narrow the branch hours for that day; null on a day = off. */
+function providerWindow(p, dow, hours) {
+  if (!p.hours || !(dow in p.hours)) return hours;
+  const mine = p.hours[dow]; if (!mine) return null;
+  const a = mine[0] > hours[0] ? mine[0] : hours[0]; const b = mine[1] < hours[1] ? mine[1] : hours[1];
+  return a < b ? [a, b] : null;
+}
+
+export function slotsForDay(db, { date, visitTypeId, providerId = null, locationId = null, from = nowIso(), durationMin = null, online = false }) {
   const vt = visitType(db, visitTypeId);
   const dur = Number(durationMin) > 0 ? Number(durationMin) : vt.durationMin;
   const hours = hoursFor(db, date, locationId);
   if (!hours) return [];
-  const step = db.settings.practice.slotMinutes || 15;
+  const rules = bookingRules(db);
+  if (online) {
+    if (!rules.onlineBooking || vt.onlineBookable === false) return [];
+    const earliest = addMinutes(nowIso(), rules.minLeadHours * 60);
+    if (new Date(earliest) > new Date(from)) from = earliest;
+    if (new Date(date + 'T00:00:00') > new Date(addDays(nowIso(), rules.maxAdvanceDays))) return [];
+  }
+  const buf = Math.max(0, Number(rules.bufferMin) || 0);
+  const dow = DAYS[new Date(date + 'T12:00:00').getDay()];
   const provs = providerId ? [provider(db, providerId)] : providersFor(db, vt, locationId);
   const dayStart = localDateTime(date, hours[0]);
   const dayEnd = localDateTime(date, hours[1]);
@@ -46,13 +66,15 @@ export function slotsForDay(db, { date, visitTypeId, providerId = null, location
   for (const p of provs) {
     const locs = locationId ? [locationId] : (p.locationIds?.length ? p.locationIds : [defaultLocationId(db)]);
     for (const loc of locs) {
-      const locHours = hoursFor(db, date, loc); if (!locHours) continue;
+      const branchHours = hoursFor(db, date, loc); if (!branchHours) continue;
+      const locHours = providerWindow(p, dow, branchHours); if (!locHours) continue;
+      const step = p.slotMinutes || db.settings.practice.slotMinutes || 15;
       const s0 = localDateTime(date, locHours[0]); const e0 = localDateTime(date, locHours[1]);
       for (let t = s0; new Date(addMinutes(t, dur)) <= new Date(e0); t = addMinutes(t, step)) {
         const end = addMinutes(t, dur);
         if (new Date(t) < new Date(from)) continue;
         // A provider working at two branches cannot be in both at once: any active appointment anywhere blocks the slot.
-        const clash = busy.some((a) => a.providerId === p.id && overlaps(t, end, a.start, a.end));
+        const clash = busy.some((a) => a.providerId === p.id && overlaps(addMinutes(t, -buf), addMinutes(end, buf), a.start, a.end));
         if (clash || blocked(db, p.id, loc, t, end)) continue;
         slots.push({ start: t, end, providerId: p.id, providerName: p.name, locationId: loc, locationName: location(db, loc)?.name || '' });
       }
@@ -83,6 +105,8 @@ export function nextSlots(db, { visitTypeId, providerId = null, locationId = nul
 }
 
 export function feeFor(db, vt, prov) {
+  const own = prov?.feeOverrides?.[vt.id];
+  if (own != null && own !== '') return Number(own) || 0;
   if (vt.fee) return vt.fee;
   return prov?.consultationFee || 0;
 }

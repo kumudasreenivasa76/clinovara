@@ -5,7 +5,7 @@ import { fullName, fmtPhone, ago, fmtWhen } from '../lib/format.js';
 import { Card, Body, Pill, Avatar, Empty, usePoll, useAction, Seg, Stat, Field, Modal } from '../components/ui.jsx';
 import { navigate } from '../App.jsx';
 
-const SRC = { after_hours: { label: 'After-hours message', icon: IconMoon, tone: 'violet' }, missed_call: { label: 'Missed call', icon: IconPhoneOff, tone: 'bad' }, no_show: { label: 'Missed appointment', icon: IconCalendarX, tone: 'warn' } };
+const SRC = { after_hours: { label: 'After-hours message', icon: IconMoon, tone: 'violet' }, missed_call: { label: 'Missed call', icon: IconPhoneOff, tone: 'bad' }, no_show: { label: 'Missed appointment', icon: IconCalendarX, tone: 'warn' }, lab_case: { label: 'Lab work arrived', icon: IconCalendarX, tone: 'warn' } };
 
 /** The morning list: who wrote or called while the clinic was closed, who did not turn up, and who we could not answer. */
 export default function Callbacks() {
@@ -42,7 +42,7 @@ export default function Callbacks() {
               </div>
               <div className="col gap-4">
                 {c.conversationId && <a className="btn sm" href="#/inbox"><IconPhoneCall size={14} />Open chat</a>}
-                {c.patientId && <button className="btn sm" onClick={() => navigate(`#/schedule?patient=${c.patientId}`)}><IconCalendarPlus size={14} />{c.source === 'no_show' ? 'Rebook' : 'Book'}</button>}
+                {c.patientId && <button className="btn sm" onClick={() => navigate(`#/schedule?patient=${c.patientId}`)}><IconCalendarPlus size={14} />{c.source === 'no_show' ? 'Rebook' : c.source === 'lab_case' ? 'Book fitting' : 'Book'}</button>}
                 <button className="btn sm ghost" onClick={() => act(() => post(`/api/callbacks/${c.id}/attempt`, { outcome: 'no answer', note: note[c.id] || '' }), 'Attempt logged')}>Tried, no answer</button>
                 <button className="btn sm primary" onClick={() => act(() => post(`/api/callbacks/${c.id}/done`, { note: note[c.id] || '' }), 'Done')}><IconCheck size={14} />Done</button>
               </div>

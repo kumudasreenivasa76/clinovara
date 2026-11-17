@@ -1,4 +1,5 @@
 import { id, nowIso, log, fullName } from '../lib.js';
+import { whatsappReady, smsReady, sendWhatsApp, sendSms, intl } from './providers.js';
 import { emit } from './webhooks.js';
 
 function fmtWhen(iso) {
@@ -34,7 +35,7 @@ export function renderTemplate(db, templateIdOrBody, ctx = {}) {
     opens: ctx.opens || '',
     calendarLink: ctx.calendarLink || '',
   };
-  return body.replace(/\{\{(\w+)\}\}/g, (_, k) => (vars[k] ?? ''));
+  return body.replace(/\{\{(\w+)\}\}/g, (_, k) => (vars[k] ?? '')).replace(/(branch)\s+/gi, '$1'); // a location already named "Main branch" must not read "Main branch branch"
 }
 
 /**
@@ -47,6 +48,7 @@ export function sendCommunication(db, { patientId, type, body, channel, appointm
   const ch = channel || db.settings.locale?.defaultChannel || 'sms';
   const c = { id: id('cm'), patientId, type, channel: ch, body, sentAt: nowIso(), status: 'sent', appointmentId, meta, by, delivery: db.settings.integrations?.messaging?.provider && db.settings.integrations.messaging.provider !== 'none' ? 'queued' : 'simulated', lang: patient?.preferredLanguage || 'en' };
   db.communications.unshift(c);
+  dispatchToProvider(db, c, patient);
   if (patient) {
     let conv = db.conversations.find((x) => x.patientId === patientId && x.status !== 'closed');
     if (!conv) {
@@ -61,8 +63,18 @@ export function sendCommunication(db, { patientId, type, body, channel, appointm
   return c;
 }
 
+/** Sends through WhatsApp Cloud API or Twilio SMS when configured; otherwise the message stays in the outbox as 'simulated'. */
+function dispatchToProvider(db, c, patient) {
+  const useWa = c.channel === 'whatsapp' && whatsappReady(); const useSms = c.channel === 'sms' && smsReady();
+  if (!patient?.phone || !(useWa || useSms)) return;
+  c.delivery = 'queued';
+  const to = intl(patient.phone, db.settings.locale?.phoneCountryCode || '91');
+  (useWa ? sendWhatsApp(to, c.body) : sendSms(to, c.body))
+    .then(() => { c.delivery = 'sent'; }).catch((e) => { c.delivery = 'failed'; c.deliveryError = e.message; });
+}
+
 export function typeLabel(type) {
-  return { reminder: 'Appointment reminder', prep: 'Preparation instructions', forms: 'Pre-visit form', recall: 'Recall', post_visit: 'Post-visit check-in', waitlist: 'Waitlist offer', treatment: 'Treatment follow-up', token: 'Token', marketing: 'Campaign', thank_you: 'Thank-you', review_request: 'Review request', missed_call: 'Missed call', missed_appointment: 'Missed appointment', aftercare: 'Aftercare instructions', custom: 'Message' }[type] || 'Message';
+  return { reminder: 'Appointment reminder', prep: 'Preparation instructions', forms: 'Pre-visit form', recall: 'Recall', post_visit: 'Post-visit check-in', waitlist: 'Waitlist offer', treatment: 'Treatment follow-up', token: 'Token', marketing: 'Campaign', thank_you: 'Thank-you', review_request: 'Review request', missed_call: 'Missed call', missed_appointment: 'Missed appointment', aftercare: 'Aftercare instructions', receipt: 'Payment receipt', custom: 'Message' }[type] || 'Message';
 }
 
 export function dueRecalls(db, now = nowIso()) {

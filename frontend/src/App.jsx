@@ -1,7 +1,8 @@
 import Logo from './components/Logo.jsx';
 import React, { useEffect, useState } from 'react';
-import { IconPhoneCall, IconEye, IconLayoutDashboard, IconMessages, IconCalendarEvent, IconClipboardText, IconDeviceDesktop, IconDental, IconSend, IconChartBar, IconSettings, IconPhone, IconUsers, IconStethoscope, IconDeviceTv, IconBuildingHospital, IconSpeakerphone, IconRocket, IconLogout, IconChevronDown, IconHeadset } from '@tabler/icons-react';
+import { IconWorld, IconPhoneCall, IconEye, IconLayoutDashboard, IconMessages, IconCalendarEvent, IconClipboardText, IconDeviceDesktop, IconDental, IconSend, IconChartBar, IconSettings, IconPhone, IconUsers, IconStethoscope, IconDeviceTv, IconBuildingHospital, IconSpeakerphone, IconRocket, IconLogout, IconChevronDown, IconHeadset, IconHome, IconSunrise, IconMessageCircle } from '@tabler/icons-react';
 import { ToastProvider } from './components/ui.jsx';
+import PublicSite from './pages/PublicSite.jsx';
 import { get, post, getToken, setToken, setTenant } from './lib/api.js';
 import { setLocale } from './lib/format.js';
 import { useBranch } from './lib/branch.js';
@@ -10,7 +11,7 @@ import Inbox from './pages/Inbox.jsx';
 import Schedule from './pages/Schedule.jsx';
 import Patients from './pages/Patients.jsx';
 import MyDay from './pages/MyDay.jsx';
-import DoctorDashboard from './pages/DoctorDashboard.jsx';
+import DoctorDashboard, { DOCTOR_TABS } from './pages/DoctorDashboard.jsx';
 import PreVisit from './pages/PreVisit.jsx';
 import Treatment from './pages/Treatment.jsx';
 import Communications from './pages/Communications.jsx';
@@ -20,6 +21,11 @@ import Calls from './pages/Calls.jsx';
 import Insights from './pages/Insights.jsx';
 import Settings from './pages/Settings.jsx';
 import Onboarding from './pages/Onboarding.jsx';
+import Setup from './pages/Setup.jsx';
+import Legal from './pages/Legal.jsx';
+import Overview from './pages/Overview.jsx';
+import Assistant from './components/Assistant.jsx';
+import FrontDeskHome from './pages/FrontDeskHome.jsx';
 import Kiosk from './pages/Kiosk.jsx';
 import Board from './pages/Board.jsx';
 import PatientPortal from './pages/PatientPortal.jsx';
@@ -41,25 +47,27 @@ export const navigate = (to) => { window.location.hash = to; };
 /** Three workspaces. `admin` (owner/admin) sees everything; `front_desk` runs the day; `doctor` sees their own patients and plans. */
 const WORKSPACES = { owner: 'admin', admin: 'admin', front_desk: 'front_desk', dentist: 'doctor', hygienist: 'doctor' };
 const NAV = [
+  { to: '#/overview', label: 'Overview', icon: IconHome, page: Overview, ws: ['admin'] },
+  { to: '#/home', label: 'Today', icon: IconSunrise, page: FrontDeskHome, ws: ['front_desk', 'admin'], sidebarWs: ['front_desk'] },
   { to: '#/doctor', label: 'My home', icon: IconStethoscope, page: DoctorDashboard, ws: ['doctor', 'admin'] },
-  { to: '#/dashboard', label: 'Arrivals & queue', icon: IconLayoutDashboard, page: Dashboard, ws: ['front_desk', 'admin'] },
-  { to: '#/callbacks', label: 'Callbacks', icon: IconPhoneCall, page: Callbacks, ws: ['front_desk', 'admin'], badge: 'callbacks' },
-  { to: '#/calls', label: 'Calls', icon: IconHeadset, page: Calls, ws: ['front_desk', 'admin'] },
+  { group: 'Front desk', to: '#/dashboard', label: 'Arrivals & queue', icon: IconLayoutDashboard, page: Dashboard, ws: ['front_desk', 'admin'] },
+  { group: 'Front desk', to: '#/callbacks', label: 'Callbacks', icon: IconPhoneCall, page: Callbacks, ws: ['front_desk', 'admin'], badge: 'callbacks' },
+  { group: 'Front desk', to: '#/calls', label: 'Calls', icon: IconHeadset, page: Calls, ws: ['front_desk', 'admin'] },
   // These three stay routable for the doctor workspace (My home links straight into one conversation or
   // question), but are left out of the doctor's own sidebar via sidebarWs — his sidebar is "My home" only,
   // never the whole clinic's inbox, schedule or patient list.
-  { to: '#/inbox', label: 'Front desk inbox', icon: IconMessages, page: Inbox, ws: ['front_desk', 'admin', 'doctor'], sidebarWs: ['front_desk', 'admin'], badge: 'inbox' },
-  { to: '#/schedule', label: 'Schedule', icon: IconCalendarEvent, page: Schedule, ws: ['front_desk', 'admin', 'doctor'], sidebarWs: ['front_desk', 'admin'] },
-  { to: '#/patients', label: 'Patients', icon: IconUsers, page: Patients, ws: ['front_desk', 'admin', 'doctor'], sidebarWs: ['front_desk', 'admin'] },
-  { to: '#/myday', label: "Dentist's day", icon: IconCalendarEvent, page: MyDay, ws: ['admin', 'front_desk'] },
-  { to: '#/previsit', label: 'Pre-visit forms', icon: IconClipboardText, page: PreVisit, ws: ['front_desk', 'admin'] },
-  { to: '#/treatment', label: 'Treatment plans', icon: IconDental, page: Treatment, ws: ['admin', 'front_desk', 'doctor'], sidebarWs: ['admin', 'front_desk'] },
-  { to: '#/messages', label: 'Patient messages', icon: IconSend, page: Communications, ws: ['front_desk', 'admin'] },
-  { to: '#/marketing', label: 'Marketing', icon: IconSpeakerphone, page: Marketing, ws: ['admin', 'front_desk'], badge: 'approvals' },
-  { to: '#/insights', label: 'Insights', icon: IconChartBar, page: Insights, ws: ['admin'] },
-  { to: '#/settings', label: 'Settings', icon: IconSettings, page: Settings, ws: ['admin'], manage: true },
+  { group: 'Front desk', to: '#/inbox', label: 'Front desk inbox', icon: IconMessages, page: Inbox, ws: ['front_desk', 'admin', 'doctor'], sidebarWs: ['front_desk', 'admin'], badge: 'inbox' },
+  { group: 'Front desk', to: '#/schedule', label: 'Schedule', icon: IconCalendarEvent, page: Schedule, ws: ['front_desk', 'admin', 'doctor'], sidebarWs: ['front_desk', 'admin'] },
+  { group: 'Patients and care', to: '#/patients', label: 'Patients', icon: IconUsers, page: Patients, ws: ['front_desk', 'admin', 'doctor'], sidebarWs: ['front_desk', 'admin'] },
+  { group: 'Patients and care', to: '#/myday', label: "Dentist's day", icon: IconCalendarEvent, page: MyDay, ws: ['admin', 'front_desk'] },
+  { group: 'Patients and care', to: '#/previsit', label: 'Pre-visit forms', icon: IconClipboardText, page: PreVisit, ws: ['front_desk', 'admin'] },
+  { group: 'Patients and care', to: '#/treatment', label: 'Treatment plans', icon: IconDental, page: Treatment, ws: ['admin', 'front_desk', 'doctor'], sidebarWs: ['admin', 'front_desk'] },
+  { group: 'Grow', to: '#/messages', label: 'Patient messages', icon: IconSend, page: Communications, ws: ['front_desk', 'admin'] },
+  { group: 'Grow', to: '#/marketing', label: 'Marketing', icon: IconSpeakerphone, page: Marketing, ws: ['admin', 'front_desk'], badge: 'approvals' },
+  { group: 'Grow', to: '#/insights', label: 'Insights', icon: IconChartBar, page: Insights, ws: ['admin'] },
+  { group: 'Clinic', to: '#/settings', label: 'Settings', icon: IconSettings, page: Settings, ws: ['admin'], manage: true },
 ];
-const WS_HOME = { admin: '#/dashboard', front_desk: '#/dashboard', doctor: '#/doctor' };
+const WS_HOME = { admin: '#/overview', front_desk: '#/home', doctor: '#/doctor' };
 const WS_LABEL = { admin: 'Admin — everything', front_desk: 'Front desk', doctor: 'Doctor' };
 const ROLE_HOME = { dentist: '#/doctor', hygienist: '#/doctor' };
 
@@ -108,7 +116,7 @@ function Shell({ hash, session }) {
   }, [hash, me.tenant?.id]); // eslint-disable-line
 
   const route = hash.split('?')[0];
-  if (route === '#/onboarding') return <Onboarding session={session} />;
+  if (route === '#/onboarding') return hash.includes('all=1') ? <Onboarding session={session} /> : <Setup session={session} />;
   const visible = NAV.filter((n) => n.ws.includes(ws) && (!n.manage || me.canManage));
   const sidebarItems = NAV.filter((n) => (n.sidebarWs || n.ws).includes(ws) && (!n.manage || me.canManage));
   const item = visible.find((n) => route === n.to || route.startsWith(n.to + '/')) || NAV.find((n) => (route === n.to) && me.canManage) || visible.find((n) => n.to === WS_HOME[ws]) || visible[0];
@@ -140,18 +148,24 @@ function Shell({ hash, session }) {
           </div>
         )}
         {showSetup && <a href="#/onboarding" className="setup-banner"><IconRocket size={16} /><div><div className="strong">Finish setup · {onboarding.percent}%</div><div className="tiny">Go live checklist</div></div></a>}
+        <button className="assist-nav" onClick={() => window.dispatchEvent(new Event('clinovara:assistant'))}><IconMessageCircle size={18} /><span>Ask assistant</span><kbd>Ctrl /</kbd></button>
         <nav className="nav col gap-4">
-          {sidebarItems.map((n) => (
-            <a key={n.to} href={n.to} className={n === item ? 'active' : ''}>
-              <n.icon size={18} />{n.label}
-              {n.badge && counts[n.badge] > 0 && <span className="badge">{counts[n.badge]}</span>}
-            </a>
+          {ws === 'doctor' && DOCTOR_TABS.map((x) => { const cur = new URLSearchParams(hash.split('?')[1] || '').get('tab') || 'today'; const on = route === '#/doctor' && cur === x.id; return <a key={x.id} href={`#/doctor?tab=${x.id}`} className={on ? 'active' : ''}><x.icon size={18} />{x.label}</a>; })}
+          {sidebarItems.filter((n) => !(ws === 'doctor' && n.to === '#/doctor')).map((n, idx, arr) => (
+            <React.Fragment key={n.to}>
+              {ws !== 'doctor' && n.group && n.group !== arr[idx - 1]?.group && <div className="nav-section">{n.group}</div>}
+              <a href={n.to} className={n === item ? 'active' : ''}>
+                <n.icon size={18} />{n.label}
+                {n.badge && counts[n.badge] > 0 && <span className="badge">{counts[n.badge]}</span>}
+              </a>
+            </React.Fragment>
           ))}
           {ws !== 'doctor' && <>
             <div className="nav-section">Patient-facing</div>
             <a href={`#/kiosk?t=${me.tenant.slug}${branch ? `&location=${branch}` : ''}`} target="_blank" rel="noreferrer"><IconDeviceDesktop size={18} />Kiosk</a>
             <a href={`#/board?t=${me.tenant.slug}${branch ? `&location=${branch}` : ''}`} target="_blank" rel="noreferrer"><IconDeviceTv size={18} />Waiting-room display</a>
             <a href={`#/patient?t=${me.tenant.slug}`} target="_blank" rel="noreferrer"><IconPhone size={18} />Patient chat demo</a>
+            <a href={`#/book?t=${me.tenant.slug}`} target="_blank" rel="noreferrer"><IconWorld size={18} />Clinic website &amp; booking</a>
           </>}
         </nav>
         <div className="sidebar-foot">
@@ -177,6 +191,7 @@ function Shell({ hash, session }) {
         </div>
       </aside>
       <main className="main"><Page hash={hash} branch={branch} locations={locations} me={me} session={session} workspace={ws} /></main>
+      <Assistant role={me.role} />
     </div>
   );
 }
@@ -189,14 +204,16 @@ export default function App() {
   // Login-by-link (invites shared on WhatsApp, kiosk provisioning): a session token in the URL is stored once and removed.
   if (params.get('token') && params.get('token') !== getToken()) { setToken(params.get('token')); params.delete('token'); window.location.replace(`${hash.split('?')[0]}${params.toString() ? '?' + params.toString() : ''}`); }
   let page = null;
-  if (hash.startsWith('#/kiosk')) page = <Kiosk locationId={params.get('location')} kioskCode={params.get('code')} tenant={params.get('t')} />;
+  if (hash === '#/terms' || hash === '#/privacy') page = <Legal kind={hash.slice(2)} />;
+  else if (hash.startsWith('#/kiosk')) page = <Kiosk locationId={params.get('location')} kioskCode={params.get('code')} tenant={params.get('t')} />;
   else if (hash.startsWith('#/board')) page = <Board locationId={params.get('location')} tenant={params.get('t')} />;
+  else if (hash === '#/book' || hash.startsWith('#/book?') || hash === '#/site' || hash.startsWith('#/site?')) page = <PublicSite />;
   else if (hash === '#/patient' || hash.startsWith('#/patient?')) page = <PatientPortal tenant={params.get('t')} />;
   else if (hash.startsWith('#/forms/')) page = <Forms token={hash.slice('#/forms/'.length).split('?')[0]} />;
   else if (hash.startsWith('#/invite/')) page = <Auth mode="invite" inviteToken={hash.slice('#/invite/'.length).split('?')[0]} session={session} />;
   else if (hash.startsWith('#/login') || hash.startsWith('#/signup') || hash.startsWith('#/forgot')) page = session.me ? <Shell hash="#/dashboard" session={session} /> : <Auth mode={hash.startsWith('#/signup') ? 'signup' : hash.startsWith('#/forgot') ? 'forgot' : 'login'} session={session} />;
   else if (session.loading) page = <div className="portal"><div className="spin" /></div>;
   else if (!session.me) page = <Landing hash={hash} />;
-  else page = <Shell hash={hash === '#/' || hash === '' ? (session.me.tenant?.onboarding?.completed === false && session.me.canManage ? '#/onboarding' : (ROLE_HOME[session.me.role] || '#/dashboard')) : hash} session={session} />;
+  else page = <Shell hash={hash === '#/' || hash === '' ? (session.me.tenant?.onboarding?.completed === false && session.me.canManage ? '#/onboarding' : (ROLE_HOME[session.me.role] || (session.me.canManage ? '#/overview' : '#/home'))) : hash} session={session} />;
   return <ToastProvider>{page}</ToastProvider>;
 }

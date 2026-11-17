@@ -18,11 +18,12 @@ export default function PatientPortal() {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [practice, setPractice] = useState('the practice');
+  const [tok, setTok] = useState('');
   const bottom = useRef(null);
   useEffect(() => { get('/api/patients?demo=1').then(setPatients).catch(() => setPatients([])); get('/api/settings').then((s) => setPractice(s.practice.name)).catch(() => {}); }, []);
   useEffect(() => { bottom.current?.scrollIntoView({ block: 'end' }); }, [conv?.messages?.length]);
   // Poll for staff replies
-  useEffect(() => { if (!conv) return; const t = setInterval(() => get(`/api/conversations/${conv.id}`).then(setConv).catch(() => {}), 4000); return () => clearInterval(t); }, [conv?.id]);
+  useEffect(() => { if (!conv) return; const t = setInterval(() => get(`/api/conversations/${conv.id}`, { 'x-chat-token': tok }).then(setConv).catch(() => {}), 4000); return () => clearInterval(t); }, [conv?.id, tok]);
   const patient = patients.find((p) => p.id === who);
   const contactPhone = patient ? patient.phone : phone;
   const contactName = patient ? fullName(patient) : name;
@@ -32,7 +33,8 @@ export default function PatientPortal() {
     const t = channel === 'call' ? `[Voice] ${text.trim()}` : text.trim();
     setText(''); setBusy(true);
     try {
-      const r = conv ? await post(`/api/conversations/${conv.id}/messages`, { text: t }) : await post('/api/conversations', { channel, contactName, contactPhone, patientId: patient?.id, text: t, forceNew: false });
+      const r = conv ? await post(`/api/conversations/${conv.id}/messages`, { text: t }, { 'x-chat-token': tok }) : await post('/api/conversations', { channel, contactName, contactPhone, text: t });
+      if (r.token) setTok(r.token);
       setConv(r.conversation);
     } catch (e) { alert(e.message); } finally { setBusy(false); }
   };

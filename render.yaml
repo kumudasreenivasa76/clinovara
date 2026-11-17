@@ -1,0 +1,20 @@
+# Render Blueprint: one web service with a persistent disk. Set the secret values in the Render dashboard.
+services:
+  - type: web
+    name: clinovara
+    runtime: docker
+    plan: starter
+    healthCheckPath: /api/health
+    disk: { name: clinovara-data, mountPath: /data, sizeGB: 5 }
+    envVars:
+      - { key: NODE_ENV, value: production }
+      - { key: CLINOVARA_DATA_DIR, value: /data }
+      - { key: CLINOVARA_FRONTEND_URL, sync: false }   # https://your-domain/
+      - { key: RESEND_API_KEY, sync: false }
+      - { key: MAIL_FROM, sync: false }
+      - { key: ANTHROPIC_API_KEY, sync: false }        # optional: Claude front desk
+      - { key: TWILIO_ACCOUNT_SID, sync: false }       # optional: SMS and phone verification
+      - { key: TWILIO_AUTH_TOKEN, sync: false }
+      - { key: TWILIO_FROM, sync: false }
+      - { key: WHATSAPP_TOKEN, sync: false }           # optional: WhatsApp Cloud API
+      - { key: WHATSAPP_PHONE_ID, sync: false }

@@ -8,6 +8,7 @@
     "dev": "node scripts/dev.mjs",
     "build": "npm run build --prefix frontend",
     "start": "node backend/src/server.js",
-    "test": "npm test --prefix backend"
+    "test": "npm test --prefix backend",
+    "backup": "node scripts/backup.mjs"
   }
 }

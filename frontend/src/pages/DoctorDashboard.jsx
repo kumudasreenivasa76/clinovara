@@ -2,16 +2,27 @@ import React, { useEffect, useState } from 'react';
 import { IconPlayerPlay, IconArmchair, IconCheck, IconMessageQuestion, IconAlertTriangle, IconClockPause, IconRepeat, IconDental, IconCalendarEvent, IconUsers, IconChartBar, IconHelpCircle, IconSearch, IconPlus, IconTrash, IconSend, IconArrowRight, IconArrowLeft, IconStethoscope, IconPhone, IconFileExport, IconFolderCheck } from '@tabler/icons-react';
 import { get, post, patch, downloadFile } from '../lib/api.js';
 import { fmtTime, fmtDate, fmtWhen, fullName, fmtMoney, minutesSince, ago, fmtPhone } from '../lib/format.js';
+import { Appointments, Earnings, FormsAndDocs } from './DoctorExtras.jsx';
+import Schedule from './Schedule.jsx';
+import { ToothChart, LabCases, CommandBar } from './DoctorTools.jsx';
+import { RxBuilder, PatientImages, Followups } from './DoctorTools2.jsx';
+import { PageHeader, MetricTile, longDate } from '../components/dash.jsx';
 import { Card, Body, Pill, Avatar, Empty, usePoll, useAction, Stat, Seg, Modal, Field, useToast } from '../components/ui.jsx';
 
-const TABS = [
+export const DOCTOR_TABS = [
   { id: 'today', label: 'Today', icon: IconStethoscope },
   { id: 'patients', label: 'My patients', icon: IconUsers },
+  { id: 'appts', label: 'Appointments', icon: IconCalendarEvent },
   { id: 'week', label: 'My week', icon: IconCalendarEvent },
+  { id: 'earnings', label: 'Earnings', icon: IconChartBar },
+  { id: 'forms', label: 'Forms & documents', icon: IconDental },
+  { id: 'followups', label: 'Follow-ups', icon: IconRepeat },
+  { id: 'lab', label: 'Lab cases', icon: IconDental },
   { id: 'plans', label: 'Treatment plans', icon: IconDental },
   { id: 'numbers', label: 'My numbers', icon: IconChartBar },
   { id: 'help', label: 'How this works', icon: IconHelpCircle },
 ];
+const TABS = DOCTOR_TABS;
 const STAGE_WORDS = { expected: 'Not arrived yet', arrived: 'Arrived, checking in', checking_in: 'Checking in at kiosk', needs_attention: 'Front desk is finishing their forms', ready: 'Waiting for you', called: 'Called — walking in', brought_back: 'In your chair', done: 'Finished', no_show: 'Did not come' };
 
 /** The dentist's home: one place for today, patients, week, plans, numbers, written in plain words. */
@@ -25,6 +36,10 @@ export default function DoctorDashboard({ me }) {
   const qs = new URLSearchParams(window.location.hash.split('?')[1] || '');
   const [chart, setChart] = useState(qs.get('chart') || null);
   const [finishing, setFinishing] = useState(null);
+  const [cmd, setCmd] = useState(false);
+  // The sections live in the sidebar and change the hash; follow it.
+  useEffect(() => { const on = () => { const q = new URLSearchParams(window.location.hash.split('?')[1] || '').get('tab'); setTab(TABS.some((x) => x.id === q) ? q : 'today'); }; window.addEventListener('hashchange', on); return () => window.removeEventListener('hashchange', on); }, []);
+  useEffect(() => { const k = (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setCmd(true); } }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k); }, []);
   useEffect(() => { const v = qs.get('finish'); if (v && data?.today) { const row = data.today.board.find((r) => r.visit?.id === v); if (row && !finishing) setFinishing(row); } }, [data?.today?.board?.length]); // eslint-disable-line
   const feeds = usePoll(() => get('/api/calendar/feeds'), [], 0);
   const act = (fn, msg) => run(async () => { await fn(); reload(); }, msg);
@@ -45,14 +60,18 @@ export default function DoctorDashboard({ me }) {
 
   return (
     <>
-      <div className="page-head">
-        <div><div className="eyebrow">{p.specialty || p.role}{p.qualifications ? ` · ${p.qualifications}` : ''}</div><div className="doc-name">Good {greeting()}, {p.name.replace(/^Dr\.\s*/, 'Dr. ')}</div><p>{t.total === 0 ? 'No patients on your list today.' : `${t.total} patient${t.total === 1 ? '' : 's'} today · ${t.done} finished · ${t.waiting} waiting${needs ? ` · ${needs} thing${needs === 1 ? ' needs' : 's need'} your reply` : ''}`}</p></div>
-        <div className="row">{!me.providerId && <select className="input" style={{ width: 200 }} value={providerId} onChange={(e) => { setProviderId(e.target.value); try { localStorage.setItem('clinovara.provider', e.target.value); } catch { /* ignore */ } }}>{data.providers.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select>}</div>
-      </div>
-      <Seg value={tab} onChange={setTab} options={TABS.map((x) => ({ value: x.id, label: <span className="row gap-4"><x.icon size={14} />{x.label}{x.id === 'today' && t.waiting ? <span className="badge">{t.waiting}</span> : null}{x.id === 'plans' && needs ? <span className="badge">{needs}</span> : null}</span> }))} />
-      <div className="mt-16" />
+      <PageHeader title={p.name.replace(/^Dr\.\s*/, 'Dr. ')} sub={`${p.specialty || p.role}${p.qualifications ? `, ${p.qualifications}` : ''} · ${longDate()}`}
+        actions={<><button className="btn" onClick={() => setCmd(true)}><IconSearch size={14} />Search<span className="tiny muted" style={{ marginLeft: 8 }}>Ctrl K</span></button>{!me.providerId && <select className="input" style={{ width: 200 }} value={providerId} onChange={(e) => { setProviderId(e.target.value); try { localStorage.setItem('clinovara.provider', e.target.value); } catch { /* ignore */ } }}>{data.providers.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select>}</>} />
+      {cmd && <CommandBar providerId={p.id} tabs={TABS} onTab={(id) => { window.location.hash = `#/doctor?tab=${id}`; }} onChart={setChart} onClose={() => setCmd(false)} />}
+      <div className="mt-16">
 
       {tab === 'today' && (<>
+        <div className="mgrid">
+          <MetricTile label="Patients today" value={t.total} hint={`${t.done} finished`} />
+          <MetricTile label="Waiting for you" value={t.waiting} hint={t.waiting ? 'Ready or checking in' : 'No one waiting'} />
+          <MetricTile label="Finished" value={t.done} hint={t.total ? `${Math.round((t.done / t.total) * 100)}% of today` : ''} />
+          <MetricTile label="Needs your reply" value={needs} hint={needs ? 'Questions and escalations' : 'Nothing open'} />
+        </div>
         {focus ? (
           <div className="doc-hero card">
             <div className="grow">
@@ -77,7 +96,7 @@ export default function DoctorDashboard({ me }) {
             <div className="list">
               {t.board.map((r) => (
                 <div className={`list-item ${r === focus ? 'active' : ''}`} key={r.appointment.id} style={{ cursor: 'pointer' }} onClick={() => setChart(r.patient.id)}>
-                  <div className="mono strong" style={{ width: 52 }}>{r.visit?.token || fmtTime(r.appointment.start)}</div>
+                  <div className="mono strong" style={{ width: 72, whiteSpace: "nowrap" }}>{r.visit?.token || fmtTime(r.appointment.start)}</div>
                   <Avatar patient={r.patient} />
                   <div className="grow"><div className="row gap-6"><span className="strong">{fullName(r.patient)}</span>{r.alerts.some((a) => a.level === 'high') && <Pill tone="bad"><IconAlertTriangle size={11} />alert</Pill>}</div><div className="tiny muted">{r.visitType?.name} · {fmtTime(r.appointment.start)} · {STAGE_WORDS[r.stage] || r.stage}{r.notes?.procedureDone ? ` · done: ${r.notes.procedureDone}` : ''}</div></div>
                   <div className="row gap-6" onClick={(e) => e.stopPropagation()}>
@@ -99,33 +118,37 @@ export default function DoctorDashboard({ me }) {
                 {needs === 0 && <div className="empty small">Nothing waiting on you. The AI and front desk handle the rest.</div>}
               </div>
             </Card>
-            <Card title="Coming up next"><div className="list">{data.upcoming.slice(0, 5).map((a) => <div className="list-item" key={a.id}><div className="mono small" style={{ width: 118 }}>{fmtWhen(a.start)}</div><div className="grow small"><b>{fullName(a.patient)}</b><div className="tiny muted">{a.visitType?.name}{a.notes ? ` · ${a.notes}` : ''}</div></div><AddToCalendar appointmentId={a.id} /></div>)}{data.upcoming.length === 0 && <div className="empty small">Nothing booked ahead.</div>}</div></Card>
+            <Card title="Coming up next"><div className="list">{data.upcoming.slice(0, 5).map((a) => <div className="list-item" key={a.id}><div className="mono small" style={{ width: 130 }}>{fmtWhen(a.start)}</div><div className="grow small"><b>{fullName(a.patient)}</b><div className="tiny muted">{a.visitType?.name}{a.notes ? ` · ${a.notes}` : ''}</div></div><AddToCalendar appointmentId={a.id} /></div>)}{data.upcoming.length === 0 && <div className="empty small">Nothing booked ahead.</div>}</div></Card>
           </div>
         </div>
       </>)}
 
       {tab === 'patients' && <MyPatients providerId={p.id} onOpen={setChart} />}
 
+      {tab === 'appts' && <><Schedule hash="" locations={[]} providerId={p.id} defaultView="day" /><div className="mt-16"><Appointments providerId={p.id} onOpen={setChart} /></div></>}
+      {tab === 'earnings' && <Earnings providerId={p.id} />}
+      {tab === 'forms' && <FormsAndDocs providerId={p.id} />}
+      {tab === 'lab' && <LabCases providerId={p.id} />}
+      {tab === 'followups' && <Followups providerId={p.id} onOpen={setChart} onTab={(id) => { window.location.hash = `#/doctor?tab=${id}`; }} />}
+
       {tab === 'week' && (<>
-        <div className="row between mb-16 wrap"><div className="small muted">Your next seven days. Chair time counts booked minutes. Ask for leave or block time here; the front desk sees it on the schedule and the waitlist gets any freed slots.</div><LeaveButton providerId={p.id} onDone={reload} /></div>
-        <div className="week">{data.week.map((d) => <div key={d.day} className={d.day === new Date().toISOString().slice(0, 10) ? 'today' : ''}>
-          <div className="d">{fmtDate(d.day).split(',')[0]}<b>{d.day.slice(8)}</b></div>
-          <div className="n">{d.count}<span className="tiny muted"> visit{d.count === 1 ? '' : 's'}</span></div>
-          <div className="meta">{d.minutes ? <><span className="t">{Math.round(d.minutes / 60 * 10) / 10} h</span> chair time</> : d.blocks.length ? null : 'Free'}{d.first && <><br /><span className="t">from {fmtTime(d.first)}</span></>}</div>
-          {d.blocks.map((b, i) => <div className="blk" key={i}>{b}</div>)}
-        </div>)}</div>
+        <Schedule hash="" locations={[]} providerId={p.id} defaultView="week" />
+        <div className="row between mb-16 wrap mt-16"><div className="small muted">Click an empty slot to book, a visit to open it, a day heading to see that day. Use Leave / block time to take time off.</div><LeaveButton providerId={p.id} onDone={reload} /></div>
         <Card className="mt-16" title={<span className="row gap-6"><IconCalendarEvent size={16} />Sync to your phone or computer calendar</span>}>
           <Body className="col gap-6">
             {myFeed?.url ? (<>
               <div className="small muted">One link, always up to date: it adds every visit on your schedule and any leave you block, and updates itself, no re-adding.</div>
-              <div className="row wrap gap-6"><button className="btn" onClick={() => { navigator.clipboard?.writeText(myFeed.url); toast('Copied. In Google Calendar: Other calendars → + → From URL. In Outlook: Add calendar → Subscribe from web. On iPhone: Settings → Calendar → Accounts → Add subscribed calendar.'); }}><IconCalendarEvent size={16} />Copy my calendar link</button><a className="btn ghost" href={myFeed.webcal}><IconCalendarEvent size={16} />Open in my calendar app</a></div>
+              <div className="row wrap gap-6"><button className="btn" onClick={() => { navigator.clipboard?.writeText(myFeed.url); toast('Copied. In Google Calendar: Other calendars → + → From URL. In Outlook: Add calendar → Subscribe from web. On iPhone: Settings → Calendar → Accounts → Add subscribed calendar.'); }}><IconCalendarEvent size={16} />Copy my calendar link</button><a className="btn ghost" href={myFeed.webcal}><IconCalendarEvent size={16} />Open in my calendar app</a>{myFeed.own && <button className="btn ghost" onClick={() => run(async () => { await post('/api/calendar/my-key', { providerId: p.id }); feeds.reload(); }, 'New link created; the old one stopped working')}>New link</button>}{myFeed.own && <button className="btn ghost" onClick={() => run(async () => { await post('/api/calendar/my-key', { providerId: p.id, disable: true }); feeds.reload(); }, 'Calendar sync turned off')}>Turn off</button>}</div>
             </>) : (
-              <div className="callout small">Whole-schedule syncing isn't turned on for this clinic yet — ask the clinic owner to enable it under Settings → Integrations → Calendar feeds. Meanwhile, tap the calendar icon next to any visit below to add just that one to your phone or computer.</div>
+              <>
+                <div className="small muted">Create a private link that keeps your phone or computer calendar (Google, Outlook, Apple) in sync with every visit and block of leave. It shows only your schedule.</div>
+                <div className="row wrap gap-6"><button className="btn primary" onClick={() => run(async () => { await post('/api/calendar/my-key', { providerId: p.id }); feeds.reload(); }, 'Your calendar link is ready')}><IconCalendarEvent size={16} />Create my calendar link</button></div>
+              </>
             )}
           </Body>
         </Card>
         <div className="grid two mt-16">
-          <Card title="Booked ahead"><div className="list">{data.upcoming.map((a) => <div className="list-item" key={a.id}><div className="mono small" style={{ width: 118 }}>{fmtWhen(a.start)}</div><div className="grow"><div className="small strong">{fullName(a.patient)}</div><div className="tiny muted">{a.visitType?.name} · {a.location?.name}{a.notes ? ` · ${a.notes}` : ''}</div></div><Pill status={a.packet || 'created'}>{a.packet === 'complete' ? 'Form done' : a.packet === 'partial' ? 'Form partly done' : 'Form not filled'}</Pill><AddToCalendar appointmentId={a.id} /></div>)}{data.upcoming.length === 0 && <Empty>Nothing booked ahead.</Empty>}</div></Card>
+          <Card title="Booked ahead"><div className="list">{data.upcoming.map((a) => <div className="list-item" key={a.id}><div className="mono small" style={{ width: 130 }}>{fmtWhen(a.start)}</div><div className="grow"><div className="small strong">{fullName(a.patient)}</div><div className="tiny muted">{a.visitType?.name} · {a.location?.name}{a.notes ? ` · ${a.notes}` : ''}</div></div><Pill status={a.packet || 'created'}>{a.packet === 'complete' ? 'Form done' : a.packet === 'partial' ? 'Form partly done' : 'Form not filled'}</Pill><AddToCalendar appointmentId={a.id} /></div>)}{data.upcoming.length === 0 && <Empty>Nothing booked ahead.</Empty>}</div></Card>
           <Card title="Leave and blocked time"><div className="list">{data.blocks.map((b) => <div className="list-item" key={b.id}><IconClockPause size={16} className="muted" /><div className="grow small">{b.reason || 'Blocked'}<div className="tiny muted">{fmtWhen(b.start)} – {fmtTime(b.end)}</div></div></div>)}{data.blocks.length === 0 && <div className="empty small">No leave or blocks coming up.</div>}</div></Card>
         </div>
       </>)}
@@ -142,8 +165,9 @@ export default function DoctorDashboard({ me }) {
       {tab === 'numbers' && <Numbers data={data} days={days} setDays={setDays} />}
 
       {tab === 'help' && <HelpGuide />}
+      </div>
 
-      {chart && <ChartDrawer patientId={chart} onClose={() => setChart(null)} onFinish={(row) => { setChart(null); setFinishing(row); }} board={t.board} />}
+      {chart && <ChartDrawer providerId={p.id} patientId={chart} onClose={() => setChart(null)} onFinish={(row) => { setChart(null); setFinishing(row); }} board={t.board} />}
       {finishing && <FinishVisit row={finishing} data={data} onClose={() => setFinishing(null)} onDone={() => { setFinishing(null); reload(); }} />}
     </>
   );
@@ -214,9 +238,10 @@ function HelpGuide() {
   );
 }
 
-function ChartDrawer({ patientId, onClose, onFinish, board }) {
+function ChartDrawer({ patientId, providerId, onClose, onFinish, board }) {
+  const [rx, setRx] = useState(false);
   const [c, setC] = useState(null);
-  const [tab, setTab] = useState('overview');
+  const [tab, setTab] = useState(() => new URLSearchParams(window.location.hash.split('?')[1] || '').get('chartTab') || 'overview');
   const [run, busy] = useAction();
   const load = () => get(`/api/doctor/chart/${patientId}`).then(setC).catch(() => {});
   useEffect(() => { load(); }, [patientId]); // eslint-disable-line
@@ -225,9 +250,12 @@ function ChartDrawer({ patientId, onClose, onFinish, board }) {
   const f = c.forms;
   const EHR_LABEL = { sent: 'Sent', queued: 'Queued (no EHR connected)', sending: 'Sending…', failed: 'Failed' };
   return (
-    <Modal title={`${fullName(p)} · chart`} onClose={onClose} wide footer={<><button className="btn" onClick={onClose}>Close</button>{row?.stage === 'brought_back' && <button className="btn primary" onClick={() => onFinish(row)}><IconCheck size={16} />Finish visit</button>}</>}>
+    <Modal title={`${fullName(p)} · chart`} onClose={onClose} wide footer={<><button className="btn" onClick={onClose}>Close</button><button className="btn" onClick={() => setRx(true)}>Prescribe</button>{row?.stage === 'brought_back' && <button className="btn primary" onClick={() => onFinish(row)}><IconCheck size={16} />Finish visit</button>}</>}>
       <div className="row wrap gap-6"><Pill tone="outline">{p.dob ? `${ageOf(p.dob)} yrs` : 'age unknown'}{p.gender ? ` · ${p.gender}` : ''}</Pill><Pill tone="outline"><IconPhone size={11} />{fmtPhone(p.phone)}</Pill>{p.abhaNumber && <Pill tone="accent">ABHA</Pill>}{p.insurance?.carrier && <Pill tone="info">{p.insurance.carrier}</Pill>}{c.alerts.map((a, i) => <Pill key={i} tone={a.level === 'high' ? 'bad' : a.level === 'medium' ? 'warn' : 'outline'}>{a.level === 'high' && <IconAlertTriangle size={11} />}{a.text}</Pill>)}</div>
-      <Seg value={tab} onChange={setTab} options={[{ value: 'overview', label: 'Health & concerns' }, { value: 'visits', label: `Past visits (${c.visits.length})` }, { value: 'plans', label: `Treatment (${c.plans.length})` }, { value: 'messages', label: 'Messages' }, { value: 'ehr', label: `EHR (${c.ehrOutbox?.length || 0})` }]} />
+      <Seg value={tab} onChange={setTab} options={[{ value: 'overview', label: 'Health & concerns' }, { value: 'teeth', label: 'Tooth chart' }, { value: 'images', label: 'X-rays & photos' }, { value: 'visits', label: `Past visits (${c.visits.length})` }, { value: 'plans', label: `Treatment (${c.plans.length})` }, { value: 'messages', label: 'Messages' }, { value: 'ehr', label: `EHR (${c.ehrOutbox?.length || 0})` }]} />
+      {tab === 'teeth' && <ToothChart patientId={patientId} providerId={providerId} />}
+      {tab === 'images' && <PatientImages patientId={patientId} />}
+      {rx && <RxBuilder patientId={patientId} providerId={providerId} onClose={() => setRx(false)} />}
       {tab === 'overview' && (f ? <div className="grid two">
         <Card soft><Body className="col gap-6 small"><div className="eyebrow">What the patient wrote</div><div><b>Concern:</b> {f.dentalConcerns.concerns || '—'}</div><div><b>Last cleaning:</b> {f.dentalConcerns.lastCleaning || '—'}</div><div><b>Anxious:</b> {f.dentalConcerns.anxiety || '—'} · <b>Gums bleed:</b> {f.dentalConcerns.bleedingGums || '—'}</div><div className="tiny faint">Form updated {ago(f.updatedAt)}</div></Body></Card>
         <Card soft><Body className="col gap-6 small"><div className="eyebrow">Medical</div><div><b>Conditions:</b> {(f.medicalHistory.conditions || []).join(', ') || 'None reported'}</div><div><b>Surgeries:</b> {f.medicalHistory.surgeries || '—'}</div><div><b>Medicines:</b> {f.medications.list || '—'}{f.medications.bloodThinners === 'yes' ? ' · on blood thinners' : ''}</div><div><b>Allergies:</b> {f.allergies.list || '—'}{f.allergies.latex === 'yes' ? ' · latex' : ''}</div><div><b>Tobacco:</b> {f.medicalHistory.smoker || '—'} · <b>Pregnant/nursing:</b> {f.medicalHistory.pregnant || '—'}</div>{f.medicalHistory.notes && <div><b>Notes:</b> {f.medicalHistory.notes}</div>}</Body></Card>

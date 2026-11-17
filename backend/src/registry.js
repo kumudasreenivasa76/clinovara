@@ -11,7 +11,7 @@ import { hashPassword } from './domain/auth.js';
 export const DEMO = { slug: 'smilecare', email: 'demo@smilecare.example', password: 'demo1234', name: 'Dr. Ananya Rao' };
 
 function initialPlatform() {
-  return { users: [], tenants: [], memberships: [], invites: [], sessions: [], otps: [], createdAt: nowIso() };
+  return { users: [], tenants: [], memberships: [], invites: [], sessions: [], otps: [], leads: [], createdAt: nowIso() };
 }
 
 export function createRegistry({ dataDir = DATA_DIR, memory = false } = {}) {

@@ -5,6 +5,7 @@ import { fmtWhen, fmtDate, fullName, fmtPhone, fmtMoney, ago, LANG_NAME } from '
 import { Card, Body, Pill, Avatar, Empty, usePoll, useAction, Modal, Field, Stat, Seg } from '../components/ui.jsx';
 import { navigate } from '../App.jsx';
 
+const HEARD = ['Google search', 'Google Maps', 'Friend or family', 'Instagram or Facebook', 'Walked past', 'Doctor referral', 'Other'];
 export default function Patients({ hash, branch, locations }) {
   const params = new URLSearchParams(hash.split('?')[1] || '');
   const [q, setQ] = useState('');
@@ -33,14 +34,14 @@ export default function Patients({ hash, branch, locations }) {
           <tbody>
             {list.map((p) => (
               <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => setOpen(p.id)}>
-                <td><div className="row"><Avatar patient={p} /><div><div className="small strong">{fullName(p)}</div><div className="tiny muted">{p.dob}{p.gender ? ` · ${p.gender}` : ''}{p.family?.length ? ` · family of ${p.family.length + 1}` : ''}</div></div></div></td>
-                <td className="small">{fmtPhone(p.phone)}</td>
+                <td style={{ minWidth: 190 }}><div className="row"><Avatar patient={p} /><div><div className="small strong">{fullName(p)}</div><div className="tiny muted">{p.dob}{p.gender ? ` · ${p.gender}` : ''}{p.family?.length ? ` · family of ${p.family.length + 1}` : ''}</div></div></div></td>
+                <td className="small" style={{ whiteSpace: "nowrap" }}>{fmtPhone(p.phone)}</td>
                 <td className="small muted">{locations.find((l) => l.id === p.locationId)?.name || '—'}</td>
                 <td className="small">{LANG_NAME[p.preferredLanguage] || p.preferredLanguage}</td>
-                <td className="small">{p.insurance?.carrier ? <><Pill tone={p.insurance.verified ? 'good' : 'outline'}>{p.insurance.carrier}</Pill></> : <span className="muted">Self-pay</span>}</td>
-                <td className="small mono">{p.abhaNumber || <span className="faint">—</span>}</td>
-                <td className="small muted">{p.lastVisit ? fmtDate(p.lastVisit) : '—'}</td>
-                <td className="small">{p.upcoming ? fmtWhen(p.upcoming.start) : p.nextRecallDue ? <span style={{ color: p.nextRecallDue < new Date().toISOString().slice(0, 10) ? 'var(--warn)' : undefined }}>Recall {fmtDate(p.nextRecallDue)}</span> : '—'}</td>
+                <td className="small" style={{ minWidth: 130 }}>{p.insurance?.carrier ? <><Pill tone={p.insurance.verified ? 'good' : 'outline'}>{p.insurance.carrier}</Pill></> : <span className="muted">Self-pay</span>}</td>
+                <td className="small mono" style={{ whiteSpace: "nowrap" }}>{p.abhaNumber || <span className="faint">—</span>}</td>
+                <td className="small muted" style={{ whiteSpace: "nowrap" }}>{p.lastVisit ? fmtDate(p.lastVisit) : '—'}</td>
+                <td className="small" style={{ whiteSpace: "nowrap" }}>{p.upcoming ? fmtWhen(p.upcoming.start) : p.nextRecallDue ? <span style={{ color: p.nextRecallDue < new Date().toISOString().slice(0, 10) ? 'var(--warn)' : undefined }}>Recall {fmtDate(p.nextRecallDue)}</span> : '—'}</td>
               </tr>
             ))}
             {list.length === 0 && <tr><td colSpan={8}><Empty icon={<IconUsers size={28} />}>No patients match.</Empty></td></tr>}
@@ -135,7 +136,8 @@ export function PatientForm({ settings, patient, onClose, onDone }) {
         <Field label="Coverage"><select className="input" value={f.insurance?.type || 'self'} onChange={(e) => ins('type', e.target.value)}>{(settings.insuranceOptions || []).map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}</select></Field>
         {f.insurance?.type !== 'self' && <><Field label="Insurer / scheme name"><input className="input" value={f.insurance?.carrier || ''} onChange={(e) => ins('carrier', e.target.value)} /></Field><Field label="Policy / member ID"><input className="input" value={f.insurance?.memberId || ''} onChange={(e) => ins('memberId', e.target.value)} /></Field><Field label="TPA"><input className="input" value={f.insurance?.tpa || ''} onChange={(e) => ins('tpa', e.target.value)} /></Field><Field label="Group number"><input className="input" value={f.insurance?.groupNumber || ''} onChange={(e) => ins('groupNumber', e.target.value)} /></Field></>}
       </div>
-      <Field label="Notes"><textarea className="input" value={f.notes || ''} onChange={(e) => set('notes', e.target.value)} /></Field>
+      <Field label="How did they hear about us?"><select className="input" value={f.source || ''} onChange={(e) => set('source', e.target.value)}><option value="">Not recorded</option>{HEARD.map((x) => <option key={x}>{x}</option>)}</select></Field>
+        <Field label="Notes"><textarea className="input" value={f.notes || ''} onChange={(e) => set('notes', e.target.value)} /></Field>
     </Modal>
   );
 }

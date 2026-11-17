@@ -99,6 +99,10 @@ API: `GET /api/doctor/dashboard`, `/patients`, `/chart/:patientId`, `/aftercare?
 
 Settings → Integrations → Calendar feeds gives each dentist a private iCalendar subscription link (Google Calendar "From URL", Outlook "Subscribe from web", iPhone subscribed calendar) that includes appointments and leave blocks; only an owner/admin can turn this on. Every appointment also has its own add-to-Google, Outlook and `.ics` links (`GET /api/calendar/links/:id`), open to any staff role — so a dentist gets calendar syncing two ways: **My home → My week** always shows a calendar icon next to each of his own upcoming visits to add just that one, and once an owner enables the whole-schedule feed, the same page offers the one-time subscription link too. Patients get a per-appointment `.ics` without their details exposed.
 
+## Receipts
+
+Recording a payment issues a numbered receipt (`RCP/26-27/0001`, per Indian financial year, never reused; prefix, optional GST-inclusive split and footer in Settings → Payments). The Collect-payment dialog opens it straight away: print it, or **Send to patient** on their WhatsApp thread. `GET /api/arrivals/:appointmentId/receipt`, `POST …/receipt/send`. Amounts are written in words in the Indian system (lakh/crore).
+
 ## EHR / HMIS integration
 
 - **FHIR R4** at `/api/fhir` (Patient incl. `$everything`, Practitioner, Location, Appointment, Encounter, Consent, QuestionnaireResponse, CarePlan, Communication, Bundle). Auth by API key (`x-api-key`) generated in Settings → Integrations; `?t=<clinic>` works while no key is set. ABHA as NDHM identifiers.

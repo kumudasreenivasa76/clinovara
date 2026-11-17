@@ -4,12 +4,12 @@ import { packetStatus } from '../domain/visits.js';
 import { emit } from '../domain/webhooks.js';
 
 const r = Router();
-const FIELDS = ['firstName', 'lastName', 'dob', 'gender', 'phone', 'email', 'abhaNumber', 'abhaAddress', 'preferredLanguage', 'locationId', 'city', 'address', 'lastVisit', 'nextRecallDue', 'notes'];
+const FIELDS = ['firstName', 'lastName', 'dob', 'gender', 'phone', 'email', 'abhaNumber', 'abhaAddress', 'preferredLanguage', 'locationId', 'city', 'address', 'lastVisit', 'nextRecallDue', 'notes', 'source'];
 const CSV_COLUMNS = ['firstName', 'lastName', 'dob', 'gender', 'phone', 'email', 'abhaNumber', 'preferredLanguage', 'branch', 'city', 'insuranceType', 'insuranceCarrier', 'memberId', 'tpa', 'lastVisit', 'nextRecallDue', 'notes'];
 
 function newPatient(db, b) {
   const cc = db.settings.locale?.phoneCountryCode || '91';
-  return { id: id('pat'), firstName: String(b.firstName || '').trim(), lastName: String(b.lastName || '').trim(), dob: b.dob || '', gender: b.gender || '', phone: digits(b.phone, cc), email: b.email || '', abhaNumber: b.abhaNumber || '', abhaAddress: b.abhaAddress || '', preferredLanguage: b.preferredLanguage || db.settings.locale?.defaultLanguage || 'en', locationId: b.locationId || db.settings.locations?.[0]?.id || null, city: b.city || '', address: b.address || '', insurance: { type: 'self', carrier: '', memberId: '', groupNumber: '', tpa: '', cardScannedAt: null, verified: false, ...(b.insurance || {}) }, lastVisit: b.lastVisit || null, nextRecallDue: b.nextRecallDue || null, notes: b.notes || '', tags: b.tags || [], createdAt: nowIso() };
+  return { id: id('pat'), source: String(b.source || '').slice(0, 60), firstName: String(b.firstName || '').trim(), lastName: String(b.lastName || '').trim(), dob: b.dob || '', gender: b.gender || '', phone: digits(b.phone, cc), email: b.email || '', abhaNumber: b.abhaNumber || '', abhaAddress: b.abhaAddress || '', preferredLanguage: b.preferredLanguage || db.settings.locale?.defaultLanguage || 'en', locationId: b.locationId || db.settings.locations?.[0]?.id || null, city: b.city || '', address: b.address || '', insurance: { type: 'self', carrier: '', memberId: '', groupNumber: '', tpa: '', cardScannedAt: null, verified: false, ...(b.insurance || {}) }, lastVisit: b.lastVisit || null, nextRecallDue: b.nextRecallDue || null, notes: b.notes || '', tags: b.tags || [], createdAt: nowIso() };
 }
 
 r.get('/', (req, res) => {

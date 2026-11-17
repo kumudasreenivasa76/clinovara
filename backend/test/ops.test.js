@@ -43,6 +43,8 @@ describe('after hours, missed calls and missed appointments', () => {
     const priya = patients.find((p) => p.firstName === 'Priya');
     const store = registry.tenantStore(registry.tenantBySlug('smilecare').id);
     const start = new Date(Date.now() - 2 * 3600000).toISOString();
+    // No-shows are only swept within the clinic's current day, so in the first two hours after midnight there is nothing to test.
+    if (new Date(start).toLocaleDateString('en-CA') !== new Date().toLocaleDateString('en-CA')) return;
     store.db.appointments.push({ id: 'apt_past', patientId: priya.id, visitTypeId: 'vt_newpatient', providerId: 'prov_rao', locationId: 'loc_indiranagar', start, end: new Date(Date.now() - 3600000).toISOString(), status: 'confirmed', source: 'staff', reminders: [], createdAt: start, fee: 500, paymentStatus: 'unpaid' });
     const board = (await api('GET', '/api/arrivals')).body;
     expect(board.swept).toBeGreaterThanOrEqual(1);
@@ -250,20 +252,21 @@ describe('demo data stays current', () => {
   it('reseeds the demo clinic automatically once a real day has passed, so "today" is never stale', async () => {
     const demo = registry.tenantBySlug('smilecare');
     const store = registry.tenantStore(demo.id);
-    expect(store.db.settings.demoSeededDate).toBe(new Date().toISOString().slice(0, 10));
-    const todaysAppointments = store.db.appointments.filter((a) => a.start.slice(0, 10) === store.db.settings.demoSeededDate).length;
+    const today = () => new Date().toLocaleDateString('en-CA'); // the clinic's day: the app runs in the clinic's time zone
+    expect(store.db.settings.demoSeededDate).toBe(today());
+    const todaysAppointments = store.db.appointments.filter((a) => new Date(a.start).toLocaleDateString('en-CA') === store.db.settings.demoSeededDate).length;
     expect(todaysAppointments).toBeGreaterThan(0);
 
     // Simulate the clinic having been seeded yesterday: back-date the marker and every "today" appointment.
-    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const yesterday = new Date(Date.now() - 86400000).toLocaleDateString('en-CA');
     store.db.settings.demoSeededDate = yesterday;
-    for (const a of store.db.appointments) if (a.start.slice(0, 10) === new Date().toISOString().slice(0, 10)) a.start = yesterday + a.start.slice(10);
+    for (const a of store.db.appointments) if (new Date(a.start).toLocaleDateString('en-CA') === today()) a.start = yesterday + a.start.slice(10);
 
     registry.ensureDemo(); // the same call app startup makes; should detect the stale date and reseed
 
     const refreshed = registry.tenantStore(demo.id);
-    expect(refreshed.db.settings.demoSeededDate).toBe(new Date().toISOString().slice(0, 10));
-    const nowToday = refreshed.db.appointments.filter((a) => a.start.slice(0, 10) === refreshed.db.settings.demoSeededDate).length;
+    expect(refreshed.db.settings.demoSeededDate).toBe(today());
+    const nowToday = refreshed.db.appointments.filter((a) => new Date(a.start).toLocaleDateString('en-CA') === refreshed.db.settings.demoSeededDate).length;
     expect(nowToday).toBe(todaysAppointments); // back to the same freshly-seeded "today" shape
   });
 
@@ -274,5 +277,32 @@ describe('demo data stays current', () => {
     const after = (await api('GET', '/api/patients')).body;
     expect(after.length).toBe(before + 1);
     expect(after.some((p) => p.firstName === 'Extra')).toBe(true);
+  });
+});
+
+describe('payment receipts', () => {
+  it('numbers receipts per financial year, builds GST split, words, and sends on WhatsApp', async () => {
+    const board = (await api('GET', '/api/arrivals')).body.board.filter((r) => r.appointment.fee > 0 && !r.appointment.paidAt);
+    const [a, b] = board.map((r) => r.appointment.id);
+    expect((await api('GET', `/api/arrivals/${a}/receipt`)).status).toBe(400); // nothing paid yet
+    await api('PUT', '/api/settings', { billing: { gstRate: 18, receiptPrefix: 'SC', nextNumber: 1 } });
+    const p1 = (await api('POST', `/api/arrivals/${a}/payment`, { amount: 1180, mode: 'UPI', reference: 'U123' })).body;
+    const p2 = (await api('POST', `/api/arrivals/${b}/payment`, { amount: 500, mode: 'Cash' })).body;
+    expect(p1.receiptNo).toMatch(/^SC\/\d\d-\d\d\/0001$/);
+    expect(p2.receiptNo).toMatch(/\/0002$/);
+    const rc = (await api('GET', `/api/arrivals/${a}/receipt`)).body;
+    expect(rc.receiptNo).toBe(p1.receiptNo);
+    expect(rc.taxable).toBe(1000); expect(rc.gst).toBe(180); expect(rc.words).toBe('One thousand one hundred eighty rupees only');
+    // counter can't be wound back to reissue a number
+    await api('PUT', '/api/settings', { billing: { nextNumber: 1 } });
+    expect((await api('GET', '/api/settings')).body.billing.nextNumber).toBe(3);
+    const sent = await api('POST', `/api/arrivals/${a}/receipt/send`);
+    expect(sent.status).toBe(201); expect(sent.body.body).toContain(p1.receiptNo);
+  });
+  it('writes amounts in Indian words', async () => {
+    const { amountInWords } = await import('../src/domain/billing.js');
+    expect(amountInWords(125000)).toBe('One lakh twenty five thousand rupees only');
+    expect(amountInWords(20000000)).toBe('Two crore rupees only');
+    expect(amountInWords(99.5)).toBe('Ninety nine rupees and fifty paise only');
   });
 });

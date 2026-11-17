@@ -1,22 +1,24 @@
 const TOKEN = 'clinovara.token';
 const TENANT = 'clinovara.tenant';
 
-export function getToken() { try { return localStorage.getItem(TOKEN) || ''; } catch { return ''; } }
-export function setToken(t) { try { if (t) localStorage.setItem(TOKEN, t); else localStorage.removeItem(TOKEN); } catch { /* ignore */ } }
+// Browser storage can be blocked (sandboxed frames, private modes). The values are also kept in memory so a login still works for the whole visit.
+let memToken = ''; let memTenant = ''; let memUser = '';
+export function getToken() { if (memToken) return memToken; try { return localStorage.getItem(TOKEN) || ''; } catch { return ''; } }
+export function setToken(t) { memToken = t || ''; try { if (t) localStorage.setItem(TOKEN, t); else localStorage.removeItem(TOKEN); } catch { /* storage blocked: memory only */ } }
 /** Clinic slug used by patient-facing pages (kiosk, display, forms, chat) that have no staff session. */
-export function getTenant() { try { return sessionStorage.getItem(TENANT) || ''; } catch { return ''; } }
-export function setTenant(slug) { try { if (slug) sessionStorage.setItem(TENANT, slug); else sessionStorage.removeItem(TENANT); } catch { /* ignore */ } }
+export function getTenant() { if (memTenant) return memTenant; try { return sessionStorage.getItem(TENANT) || ''; } catch { return ''; } }
+export function setTenant(slug) { memTenant = slug || ''; try { if (slug) sessionStorage.setItem(TENANT, slug); else sessionStorage.removeItem(TENANT); } catch { /* storage blocked: memory only */ } }
 
 export function userName() {
-  try { return localStorage.getItem('clinovara.user') || 'Front desk'; } catch { return 'Front desk'; }
+  if (memUser) return memUser; try { return localStorage.getItem('clinovara.user') || 'Front desk'; } catch { return 'Front desk'; }
 }
-export function setUserName(name) { try { localStorage.setItem('clinovara.user', name); } catch { /* ignore */ } }
+export function setUserName(name) { memUser = name || ''; try { localStorage.setItem('clinovara.user', name); } catch { /* ignore */ } }
 
 const listeners = new Set();
 export function onUnauthorized(fn) { listeners.add(fn); return () => listeners.delete(fn); }
 
-export async function api(method, path, body) {
-  const headers = { 'content-type': 'application/json' };
+export async function api(method, path, body, extra = {}) {
+  const headers = { 'content-type': 'application/json', ...extra };
   const token = getToken(); if (token) headers.authorization = `Bearer ${token}`;
   const tenant = getTenant(); if (tenant) headers['x-tenant'] = tenant;
   const res = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -30,8 +32,8 @@ export async function api(method, path, body) {
   }
   return data;
 }
-export const get = (path) => api('GET', path);
-export const post = (path, body = {}) => api('POST', path, body);
+export const get = (path, extra) => api('GET', path, undefined, extra);
+export const post = (path, body = {}, extra) => api('POST', path, body, extra);
 export const put = (path, body = {}) => api('PUT', path, body);
 export const patch = (path, body = {}) => api('PATCH', path, body);
 export const del = (path) => api('DELETE', path);

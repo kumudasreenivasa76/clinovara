@@ -70,6 +70,8 @@ function preferredDate(text) {
 }
 function pickSlot(text, slots) {
   if (!slots?.length) return null;
+  // "the earliest", "any time", "whichever is fine": take the first one offered.
+  if (/(earliest|soonest|asap|any ?time|any of (them|these)|whichever|you choose|anything (works|is fine))/.test(text) && !/\d{1,2}(:\d{2})?\s*(am|pm)/.test(text)) return slots[0];
   const m = text.match(/\b(first|second|third|fourth|1st|2nd|3rd|4th|option ?[1-4]|[1-4])\b/);
   if (m) {
     const map = { first: 0, '1st': 0, 1: 0, second: 1, '2nd': 1, 2: 1, third: 2, '3rd': 2, 3: 2, fourth: 3, '4th': 3, 4: 3 };
@@ -142,7 +144,9 @@ export function ruleEngine(db, conv, text) {
       if (!slots.length) return { ...res, intent: 'book', escalate: true, escalationReason: 'No availability found for request', reply: `I could not find more openings that fit. I am asking our team to look at the schedule and reach out to you.` };
       return { ...res, intent: 'book', slots, state: { ...state, slots, preferredTime: pt }, reply: `No problem. Here are some other options:\n${slotList(slots)}\nReply with the number that works.` };
     }
-    const slot = pickSlot(t, state.slots);
+    // "the earliest", "any time", "whichever is fine": take the first one offered.
+    const wantsFirst = /(earliest|soonest|asap|any ?time|any of (them|these)|whichever|you choose|anything (works|is fine))/.test(t) && !/\d{1,2}(:\d{2})?\s*(am|pm)/.test(t);
+    const slot = wantsFirst ? state.slots[0] : pickSlot(t, state.slots);
     if (slot) {
       if (!conv.patientId) {
         return { ...res, intent: 'book', state: { ...state, step: 'collect_identity', chosen: slot }, reply: `Great, ${fmtWhen(slot.start)} it is. To finish booking, please reply with your full name and date of birth (for example: Jane Doe, 1990-05-14).` };

@@ -13,6 +13,8 @@ export default function Settings({ hash, me, session }) {
   const [est, setEst] = useState(null);
   useEffect(() => { get('/api/estimates/visit-types').then(setEst).catch(() => {}); }, []);
   const [tab, setTab] = useState(new URLSearchParams((hash || '').split('?')[1] || '').get('tab') || 'practice');
+  // A link such as #/settings?tab=team must switch the tab even when Settings is already open.
+  useEffect(() => { const t = new URLSearchParams((hash || '').split('?')[1] || '').get('tab'); if (t) setTab(t); }, [hash]);
   const [run, busy] = useAction();
   const load = () => get('/api/settings').then(setS);
   useEffect(() => { load(); }, []);
@@ -43,6 +45,16 @@ export default function Settings({ hash, me, session }) {
               <Field label="Email"><input className="input" value={s.practice.email} onChange={(e) => up({ practice: { ...s.practice, email: e.target.value } })} /></Field>
               <Field label="Registration number (state dental council / clinic licence)"><input className="input" value={s.practice.registrationNumber || ''} onChange={(e) => up({ practice: { ...s.practice, registrationNumber: e.target.value } })} /></Field>
               <Field label="Scheduling grid (minutes)"><input className="input" type="number" value={s.practice.slotMinutes} onChange={(e) => up({ practice: { ...s.practice, slotMinutes: Number(e.target.value) || 15 } })} /></Field>
+            </Body></Card>
+            <Card title="Booking rules (online website, AI and desk)"><Body className="col">
+              {(() => { const b = { bufferMin: 0, minLeadHours: 0, maxAdvanceDays: 60, onlineBooking: true, showFees: true, ...(s.practice.booking || {}) }; const set = (k, v) => up({ practice: { ...s.practice, booking: { ...b, [k]: v } } }); return (<>
+                <label className="check small"><input type="checkbox" checked={b.onlineBooking} onChange={(e) => set('onlineBooking', e.target.checked)} />Patients can book on the clinic website</label>
+                <label className="check small"><input type="checkbox" checked={b.showFees} onChange={(e) => set('showFees', e.target.checked)} />Show fees on the website</label>
+                <Field label="Gap between appointments (minutes)" hint="Cleaning/turnaround time kept free after each visit"><input className="input" type="number" min="0" style={{ width: 100 }} value={b.bufferMin} onChange={(e) => set('bufferMin', Number(e.target.value) || 0)} /></Field>
+                <Field label="Earliest online booking (hours from now)"><input className="input" type="number" min="0" style={{ width: 100 }} value={b.minLeadHours} onChange={(e) => set('minLeadHours', Number(e.target.value) || 0)} /></Field>
+                <Field label="Furthest online booking (days ahead)"><input className="input" type="number" min="1" style={{ width: 100 }} value={b.maxAdvanceDays} onChange={(e) => set('maxAdvanceDays', Number(e.target.value) || 60)} /></Field>
+                <div className="tiny muted">Website link: <span className="mono">#/book?t=&lt;your clinic code&gt;</span> (also in the sidebar under Patient-facing). Gap and per-dentist timings also apply to desk and AI bookings.</div>
+              </>); })()}
             </Body></Card>
             <Card title="Default hours (branches can override)"><Body className="col"><Hours hours={s.practice.hours} onChange={(h) => up({ practice: { ...s.practice, hours: h } })} /></Body></Card>
           </div>
@@ -85,6 +97,7 @@ export default function Settings({ hash, me, session }) {
                     </div>
                     {(() => { const sug = est?.suggestions?.find((x) => x.visitTypeId === v.id); return sug ? <div className={`callout small ${Math.abs(sug.delta) >= 10 ? 'warn' : ''}`}><b>AI estimate: {sug.suggested} min</b> <span className="muted">({sug.confidence} confidence)</span> — {sug.basis} {sug.action}{Math.abs(sug.delta) >= 5 && <button className="btn sm" style={{ marginLeft: 8 }} onClick={() => list('visitTypes', i, { durationMin: sug.suggested })}>Use {sug.suggested} min</button>}</div> : null; })()}
                     <Field label="Words patients use (English, Hindi, Kannada, Hinglish — comma separated)" hint="The AI maps these to this visit type."><input className="input" value={v.keywords.join(', ')} onChange={(e) => list('visitTypes', i, { keywords: e.target.value.split(',').map((x) => x.trim().toLowerCase()).filter(Boolean) })} /></Field>
+                    <label className="check small mt-8"><input type="checkbox" checked={v.onlineBookable !== false} onChange={(e) => list('visitTypes', i, { onlineBookable: e.target.checked })} />Patients can book this on the website</label>
                     <div className="row mt-8" style={{ justifyContent: 'flex-end' }}><button className="btn sm ghost" onClick={() => remove('visitTypes', i)}><IconTrash size={14} />Remove</button></div>
                   </div>
                 ))}
@@ -99,9 +112,19 @@ export default function Settings({ hash, me, session }) {
                       <Field label="Role"><select className="input" value={p.role} onChange={(e) => list('providers', i, { role: e.target.value })}><option>Dentist</option><option>Hygienist</option></select></Field>
                       <Field label="Specialty"><input className="input" value={p.specialty || ''} onChange={(e) => list('providers', i, { specialty: e.target.value })} placeholder="Endodontist, Orthodontist, Oral surgeon…" /></Field>
                       <Field label="Qualifications"><input className="input" value={p.qualifications || ''} onChange={(e) => list('providers', i, { qualifications: e.target.value })} placeholder="BDS, MDS" /></Field>
+                      <Field label="Dentist's share of fees collected (%)" hint="Used for the Earnings tab; the rest is the clinic's"><input className="input" type="number" min="0" max="100" value={p.revenueSharePct ?? 100} onChange={(e) => list('providers', i, { revenueSharePct: Math.min(100, Math.max(0, Number(e.target.value))) })} /></Field>
                       <Field label={`Consultation fee (${s.locale?.currencySymbol || '₹'})`}><input className="input" type="number" value={p.consultationFee || 0} onChange={(e) => list('providers', i, { consultationFee: Number(e.target.value) })} /></Field>
                       <Field label="Works at"><div className="row wrap gap-6">{s.locations.map((l) => <label key={l.id} className="check small"><input type="checkbox" checked={(p.locationIds || []).includes(l.id)} onChange={(e) => list('providers', i, { locationIds: e.target.checked ? [...(p.locationIds || []), l.id] : (p.locationIds || []).filter((x) => x !== l.id) })} />{l.name}</label>)}</div></Field>
                     </div>
+                    <details className="mt-8"><summary className="small muted" style={{ cursor: 'pointer' }}>Working days &amp; appointment length for {p.name}</summary><div className="col mt-8">
+                      <div className="tiny muted">Narrows the branch hours for this person. Leave a day unticked for a day off.</div>
+                      <Hours hours={DAYS.reduce((o, d) => ({ ...o, [d]: p.hours ? (p.hours[d] ?? null) : (s.practice.hours[d] || null) }), {})} onChange={(h) => list('providers', i, { hours: h })} />
+                      <div className="row"><Field label="Slot step (minutes)" hint="Blank = clinic grid"><input className="input" type="number" min="5" style={{ width: 90 }} value={p.slotMinutes || ''} onChange={(e) => list('providers', i, { slotMinutes: Number(e.target.value) || undefined })} /></Field>{p.hours && <button className="btn sm ghost" onClick={() => list('providers', i, { hours: undefined })}>Use branch hours</button>}</div>
+                    </div></details>
+                    <details className="mt-8"><summary className="small muted" style={{ cursor: 'pointer' }}>Fee per visit type for {p.name}</summary><div className="col mt-8">
+                      <div className="tiny muted">Blank = use the visit type's fee (or the consultation fee when that is 0).</div>
+                      {s.visitTypes.filter((v) => !v.providerRole || v.providerRole === p.role).map((v) => <div className="row" key={v.id}><span className="small" style={{ flex: 1 }}>{v.name} <span className="muted">({v.fee ? `${s.locale?.currencySymbol || '₹'}${v.fee}` : 'consultation fee'})</span></span><input className="input" type="number" min="0" style={{ width: 110 }} placeholder="default" value={p.feeOverrides?.[v.id] ?? ''} onChange={(e) => { const fo = { ...(p.feeOverrides || {}) }; if (e.target.value === '') delete fo[v.id]; else fo[v.id] = Number(e.target.value); list('providers', i, { feeOverrides: fo }); }} /></div>)}
+                    </div></details>
                     <div className="row mt-8" style={{ justifyContent: 'flex-end' }}><button className="btn sm ghost" onClick={() => remove('providers', i)}><IconTrash size={14} />Remove</button></div>
                   </div>
                 ))}
@@ -131,6 +154,10 @@ export default function Settings({ hash, me, session }) {
             <Card title="Payment modes"><Body className="col">
               <Field label="Modes offered at the desk (comma separated)"><input className="input" value={(s.paymentModes || []).join(', ')} onChange={(e) => up({ paymentModes: e.target.value.split(',').map((x) => x.trim()).filter(Boolean) })} /></Field>
               <Field label="Currency symbol"><input className="input" style={{ width: 80 }} value={s.locale?.currencySymbol || '₹'} onChange={(e) => up({ locale: { ...s.locale, currencySymbol: e.target.value } })} /></Field>
+              <Field label="Receipt number prefix"><input className="input" style={{ width: 120 }} value={s.billing?.receiptPrefix ?? 'RCP'} onChange={(e) => up({ billing: { ...s.billing, receiptPrefix: e.target.value } })} /></Field>
+              <Field label="GST on receipts (% included in the amount; 0 = none shown)"><input className="input" type="number" min="0" max="28" style={{ width: 100 }} value={s.billing?.gstRate ?? 0} onChange={(e) => up({ billing: { ...s.billing, gstRate: e.target.value } })} /></Field>
+              <Field label="Receipt footer"><input className="input" value={s.billing?.footer ?? ''} onChange={(e) => up({ billing: { ...s.billing, footer: e.target.value } })} /></Field>
+              <div className="tiny muted">Receipts are numbered "{s.billing?.receiptPrefix || 'RCP'}/FY/0001" per Indian financial year and never reused. Whether GST applies to your services is a question for your accountant — leave 0 if unsure.</div>
               <div className="tiny muted">Fees come from the visit type, or the dentist's consultation fee when the visit type has none. Procedures use the treatment-plan estimate.</div>
             </Body></Card>
             <Card title="Insurance & schemes accepted" actions={<button className="btn sm" onClick={() => up({ insuranceOptions: [...(s.insuranceOptions || []), { id: `ins_${Date.now().toString(36)}`, label: 'New scheme', examples: '' }] })}><IconPlus size={14} />Add</button>}><Body className="col">
@@ -211,35 +238,15 @@ function IntegrationsTab() {
   const [hook, setHook] = useState({ name: '', url: '', events: [] });
   const [run, busy] = useAction();
   const toast = useToast();
+  const [status, setStatus] = useState(null);
   const load = () => get('/api/integrations').then(setCfg).catch(() => {});
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); get('/api/integrations/status').then(setStatus).catch(() => {}); }, []);
   if (!cfg) return <div className="skeleton" />;
   const base = `${window.location.origin}/api/fhir`;
   const copy = (t) => { navigator.clipboard?.writeText(t); toast('Copied'); };
   return (
     <div className="col gap-16">
-      <div className="grid two">
-        <Card title={<span className="row gap-6"><IconKey size={16} />API access (FHIR R4)</span>}><Body className="col">
-          <div className="small">Any EHR, HMIS or practice-management system can read and write Clinovara data over standard FHIR R4. Base URL: <span className="mono">{base}</span> <button className="btn sm ghost icon" onClick={() => copy(base)}><IconCopy size={12} /></button></div>
-          <div className="tag-list">{['Patient', 'Practitioner', 'Location', 'Appointment', 'Encounter', 'Consent', 'QuestionnaireResponse', 'CarePlan', 'Communication'].map((r) => <a key={r} className="pill outline" href={`${base}/${r}`} target="_blank" rel="noreferrer">{r}</a>)}<a className="pill accent" href={`${base}/Bundle`} target="_blank" rel="noreferrer">Full Bundle export</a><a className="pill outline" href={`${base}/metadata`} target="_blank" rel="noreferrer">CapabilityStatement</a></div>
-          <div className="tiny muted">Writes: POST /Patient (create or update by ABHA, id or mobile+DOB) and POST /Appointment. ABHA IDs are exported as NDHM identifiers, so ABDM HIP/HIU flows can map directly. Patient records include the {'{$everything}'} operation.</div>
-          <div className="divider" />
-          <div className="row between"><div className="small">API key: {cfg.hasApiKey ? <span className="mono">{cfg.apiKey}</span> : <Pill tone="warn">Not set — endpoints are open on this network</Pill>}</div><div className="row gap-6"><button className="btn sm" disabled={busy} onClick={() => run(async () => { const r = await post('/api/integrations/api-key'); setNewKey(r.apiKey); load(); }, 'New key generated')}>{cfg.hasApiKey ? 'Rotate key' : 'Generate key'}</button>{cfg.hasApiKey && <button className="btn sm ghost" onClick={() => run(async () => { await del('/api/integrations/api-key'); setNewKey(null); load(); }, 'Key removed')}>Remove</button>}</div></div>
-          {newKey && <div className="callout small"><b>Copy this key now — it is shown once.</b><div className="row mt-8"><code className="mono" style={{ wordBreak: 'break-all' }}>{newKey}</code><button className="btn sm ghost icon" onClick={() => copy(newKey)}><IconCopy size={12} /></button></div><div className="tiny muted mt-8">Send it as the <span className="mono">x-api-key</span> header (or Bearer token) on every /api/fhir request.</div></div>}
-        </Body></Card>
-        <Card title={<span className="row gap-6"><IconPlugConnected size={16} />Connected systems</span>}><Body className="col">
-          <Field label="EHR / practice software name"><input className="input" value={cfg.ehr?.name || ''} onChange={(e) => setCfg({ ...cfg, ehr: { ...cfg.ehr, name: e.target.value } })} placeholder="e.g. Dentee, Carestack, Practo Ray, custom HMIS" /></Field>
-          <Field label="Their FHIR base URL (for future two-way sync)"><input className="input mono" value={cfg.ehr?.fhirBaseUrl || ''} onChange={(e) => setCfg({ ...cfg, ehr: { ...cfg.ehr, fhirBaseUrl: e.target.value } })} placeholder="https://ehr.example/fhir" /></Field>
-          <div className="divider" />
-          <Field label="Messaging provider"><select className="input" value={cfg.messaging?.provider || 'none'} onChange={(e) => setCfg({ ...cfg, messaging: { ...cfg.messaging, provider: e.target.value } })}><option value="none">None (messages stay in the outbox)</option><option value="whatsapp_cloud">WhatsApp Business — Meta Cloud API</option><option value="gupshup">WhatsApp — Gupshup</option><option value="interakt">WhatsApp — Interakt</option><option value="msg91">SMS — MSG91</option><option value="kaleyra">SMS — Kaleyra</option><option value="twilio">Twilio</option></select></Field>
-          <Field label="Sender ID / phone number ID"><input className="input" value={cfg.messaging?.senderId || ''} onChange={(e) => setCfg({ ...cfg, messaging: { ...cfg.messaging, senderId: e.target.value } })} /></Field>
-          <div className="divider" />
-          <label className="check small"><input type="checkbox" checked={!!cfg.abdm?.enabled} onChange={(e) => setCfg({ ...cfg, abdm: { ...cfg.abdm, enabled: e.target.checked } })} />Registered as an ABDM Health Information Provider (HIP)</label>
-          <div className="grid two"><Field label="HIP ID"><input className="input mono" value={cfg.abdm?.hipId || ''} onChange={(e) => setCfg({ ...cfg, abdm: { ...cfg.abdm, hipId: e.target.value } })} /></Field><Field label="HIP name"><input className="input" value={cfg.abdm?.hipName || ''} onChange={(e) => setCfg({ ...cfg, abdm: { ...cfg.abdm, hipName: e.target.value } })} /></Field></div>
-          <button className="btn primary" style={{ alignSelf: 'flex-start' }} disabled={busy} onClick={() => run(async () => { await put('/api/integrations/config', { ehr: cfg.ehr, messaging: cfg.messaging, abdm: cfg.abdm }); load(); }, 'Integration settings saved')}><IconDeviceFloppy size={16} />Save</button>
-          <div className="tiny muted">These settings are stored for the connector; sending through the provider and ABDM consent-manager flows are not wired in this build. Messages are recorded in the outbox until they are.</div>
-        </Body></Card>
-      </div>
+      <StatusBoard status={status} cfg={cfg} />
       <Card title="Calendar feeds (Google, Outlook, Apple)" actions={<div className="row gap-6">{feeds?.enabled && <button className="btn sm ghost" onClick={() => run(async () => { await post('/api/calendar/key', { disable: true }); loadFeeds(); }, 'Feeds disabled')}>Disable</button>}<button className="btn sm" disabled={busy} onClick={() => run(async () => { await post('/api/calendar/key'); loadFeeds(); }, feeds?.enabled ? 'Feed links rotated' : 'Feeds enabled')}>{feeds?.enabled ? 'Rotate links' : 'Enable feeds'}</button></div>}>
         <Body className="col">
           <div className="small muted">Each dentist gets a private subscription link. In Google Calendar: Other calendars → + → From URL. In Outlook: Add calendar → Subscribe from web. On iPhone: Settings → Calendar → Accounts → Add subscribed calendar. Appointments and leave blocks appear within 15 minutes; patients get add-to-calendar links in their confirmations.</div>
@@ -262,6 +269,31 @@ function IntegrationsTab() {
           {cfg.log.length > 0 && <div><div className="small strong mb-8">Recent deliveries</div><table className="table"><thead><tr><th>Event</th><th>URL</th><th>Status</th><th>When</th></tr></thead><tbody>{cfg.log.slice(0, 10).map((l) => <tr key={l.id}><td className="mono small">{l.event}</td><td className="tiny muted truncate" style={{ maxWidth: 260 }}>{l.url}</td><td><Pill tone={l.status === 'delivered' ? 'good' : l.status === 'failed' ? 'bad' : ''}>{l.status}{l.responseCode ? ` ${l.responseCode}` : ''}{l.error ? ` · ${l.error}` : ''}</Pill></td><td className="tiny muted">{ago(l.at)}</td></tr>)}</tbody></table></div>}
         </Body>
       </Card>
+      <details className="setup-card setup-more">
+        <summary>Advanced: EHR, FHIR and ABDM (connect these when you are ready)</summary>
+        <div className="col gap-16" style={{ paddingTop: 14 }}>
+      <div className="grid two">
+        <Card title={<span className="row gap-6"><IconKey size={16} />API access (FHIR R4)</span>}><Body className="col">
+          <div className="small">Any EHR, HMIS or practice-management system can read and write Clinovara data over standard FHIR R4. Base URL: <span className="mono">{base}</span> <button className="btn sm ghost icon" onClick={() => copy(base)}><IconCopy size={12} /></button></div>
+          <div className="tag-list">{['Patient', 'Practitioner', 'Location', 'Appointment', 'Encounter', 'Consent', 'QuestionnaireResponse', 'CarePlan', 'Communication'].map((r) => <a key={r} className="pill outline" href={`${base}/${r}`} target="_blank" rel="noreferrer">{r}</a>)}<a className="pill accent" href={`${base}/Bundle`} target="_blank" rel="noreferrer">Full Bundle export</a><a className="pill outline" href={`${base}/metadata`} target="_blank" rel="noreferrer">CapabilityStatement</a></div>
+          <div className="tiny muted">Writes: POST /Patient (create or update by ABHA, id or mobile+DOB) and POST /Appointment. ABHA IDs are exported as NDHM identifiers, so ABDM HIP/HIU flows can map directly. Patient records include the {'{$everything}'} operation.</div>
+          <div className="divider" />
+          <div className="row between"><div className="small">API key: {cfg.hasApiKey ? <span className="mono">{cfg.apiKey}</span> : <Pill tone="warn">Not set — endpoints are open on this network</Pill>}</div><div className="row gap-6"><button className="btn sm" disabled={busy} onClick={() => run(async () => { const r = await post('/api/integrations/api-key'); setNewKey(r.apiKey); load(); }, 'New key generated')}>{cfg.hasApiKey ? 'Rotate key' : 'Generate key'}</button>{cfg.hasApiKey && <button className="btn sm ghost" onClick={() => run(async () => { await del('/api/integrations/api-key'); setNewKey(null); load(); }, 'Key removed')}>Remove</button>}</div></div>
+          {newKey && <div className="callout small"><b>Copy this key now — it is shown once.</b><div className="row mt-8"><code className="mono" style={{ wordBreak: 'break-all' }}>{newKey}</code><button className="btn sm ghost icon" onClick={() => copy(newKey)}><IconCopy size={12} /></button></div><div className="tiny muted mt-8">Send it as the <span className="mono">x-api-key</span> header (or Bearer token) on every /api/fhir request.</div></div>}
+        </Body></Card>
+        <Card title={<span className="row gap-6"><IconPlugConnected size={16} />Connected systems</span>}><Body className="col">
+          <Field label="EHR / practice software name"><input className="input" value={cfg.ehr?.name || ''} onChange={(e) => setCfg({ ...cfg, ehr: { ...cfg.ehr, name: e.target.value } })} placeholder="e.g. Dentee, Carestack, Practo Ray, custom HMIS" /></Field>
+          <Field label="Their FHIR base URL (for future two-way sync)"><input className="input mono" value={cfg.ehr?.fhirBaseUrl || ''} onChange={(e) => setCfg({ ...cfg, ehr: { ...cfg.ehr, fhirBaseUrl: e.target.value } })} placeholder="https://ehr.example/fhir" /></Field>
+          <div className="divider" />
+          <Field label="Messaging provider"><select className="input" value={cfg.messaging?.provider || 'none'} onChange={(e) => setCfg({ ...cfg, messaging: { ...cfg.messaging, provider: e.target.value } })}><option value="none">None (messages stay in the outbox)</option><option value="whatsapp_cloud">WhatsApp Business — Meta Cloud API</option><option value="gupshup">WhatsApp — Gupshup</option><option value="interakt">WhatsApp — Interakt</option><option value="msg91">SMS — MSG91</option><option value="kaleyra">SMS — Kaleyra</option><option value="twilio">Twilio</option></select></Field>
+          <Field label="Sender ID / phone number ID"><input className="input" value={cfg.messaging?.senderId || ''} onChange={(e) => setCfg({ ...cfg, messaging: { ...cfg.messaging, senderId: e.target.value } })} /></Field>
+          <div className="divider" />
+          <label className="check small"><input type="checkbox" checked={!!cfg.abdm?.enabled} onChange={(e) => setCfg({ ...cfg, abdm: { ...cfg.abdm, enabled: e.target.checked } })} />Registered as an ABDM Health Information Provider (HIP)</label>
+          <div className="grid two"><Field label="HIP ID"><input className="input mono" value={cfg.abdm?.hipId || ''} onChange={(e) => setCfg({ ...cfg, abdm: { ...cfg.abdm, hipId: e.target.value } })} /></Field><Field label="HIP name"><input className="input" value={cfg.abdm?.hipName || ''} onChange={(e) => setCfg({ ...cfg, abdm: { ...cfg.abdm, hipName: e.target.value } })} /></Field></div>
+          <button className="btn primary" style={{ alignSelf: 'flex-start' }} disabled={busy} onClick={() => run(async () => { await put('/api/integrations/config', { ehr: cfg.ehr, messaging: cfg.messaging, abdm: cfg.abdm }); load(); }, 'Integration settings saved')}><IconDeviceFloppy size={16} />Save</button>
+          <div className="tiny muted">These settings are stored for the connector; sending through the provider and ABDM consent-manager flows are not wired in this build. Messages are recorded in the outbox until they are.</div>
+        </Body></Card>
+      </div>
       <Card title={<span className="row gap-6"><IconPlugConnected size={16} />EHR record queue</span>}>
         <Body className="col gap-16">
           <div className="small muted">Visit summaries and closed cases dentists send to the EHR, as a FHIR bundle (Patient, Encounter, CarePlan, and a visit summary document). Without an EHR base URL above, records queue here until one is connected.</div>
@@ -277,6 +309,8 @@ function IntegrationsTab() {
           </div>
         </Body>
       </Card>
+        </div>
+      </details>
     </div>
   );
 }
@@ -458,5 +492,28 @@ function TryACall({ enabled }) {
         )}
       </Body>
     </Card>
+  );
+}
+
+const LIVE_ROWS = [
+  ['email', 'Email', 'Verification codes, password resets and team invitations', 'Set RESEND_API_KEY and MAIL_FROM on the server'],
+  ['sms', 'SMS', 'Phone verification and SMS reminders', 'Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_FROM on the server'],
+  ['whatsapp', 'WhatsApp', 'Reminders, recalls and replies to patients', 'Set WHATSAPP_TOKEN and WHATSAPP_PHONE_ID on the server'],
+  ['ai', 'Claude AI', 'Patient chat, marketing drafts and the staff assistant understand free-form questions (a rule engine runs without it)', 'Set ANTHROPIC_API_KEY on the server'],
+];
+/** Which connections are live, and exactly what turns the others on. */
+function StatusBoard({ status, cfg }) {
+  if (!status) return <div className="skeleton" />;
+  const o = status.outbox;
+  return (
+    <Card title="Connections"><Body className="col gap-8">
+      {LIVE_ROWS.map(([k, name, what, how]) => <div className="review-row" key={k}>
+        <span className={`review-dot ${status.server[k] ? 'ok' : ''}`}>{status.server[k] ? '✓' : '–'}</span>
+        <div className="grow"><div className="small strong">{name} <Pill tone={status.server[k] ? 'good' : 'warn'}>{status.server[k] ? 'Live' : 'Not connected'}</Pill></div><div className="tiny muted">{what}{status.server[k] ? '' : `. ${how}.`}</div></div>
+      </div>)}
+      <div className="review-row"><span className={`review-dot ${status.clinic.googleReview ? 'ok' : ''}`}>{status.clinic.googleReview ? '✓' : '–'}</span><div className="grow"><div className="small strong">Google reviews <Pill tone={status.clinic.googleReview ? 'good' : 'warn'}>{status.clinic.googleReview ? 'Link added' : 'No link yet'}</Pill></div><div className="tiny muted">Thank-you messages ask happy patients for a review. {status.clinic.googleReview ? '' : 'Add your Google review link under Marketing.'}</div></div></div>
+      <div className="review-row"><span className={`review-dot ${status.clinic.webhooks ? 'ok' : ''}`}>{status.clinic.webhooks ? '✓' : '–'}</span><div className="grow"><div className="small strong">Webhooks <Pill tone={status.clinic.webhooks ? 'good' : 'outline'}>{status.clinic.webhooks ? `${status.clinic.webhooks} active` : 'None'}</Pill></div><div className="tiny muted">Send events to billing, analytics or automation tools such as Zapier. Add one below.</div></div></div>
+      {(o.simulated > 0 || o.failed > 0) && <div className="callout small">{o.sent} messages delivered, {o.simulated} waiting in the outbox because no WhatsApp or SMS provider is connected{o.failed ? `, ${o.failed} failed` : ''}.</div>}
+    </Body></Card>
   );
 }

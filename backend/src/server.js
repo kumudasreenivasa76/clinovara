@@ -2,10 +2,13 @@ import { createApp } from './app.js';
 import { createRegistry, DEMO } from './registry.js';
 import { DATA_DIR } from './store.js';
 import { aiMode } from './domain/frontDesk.js';
+import { runScheduledJobs } from './jobs.js';
 
 const port = Number(process.env.PORT || 4200);
 const registry = createRegistry();
 const app = createApp({ registry });
+
+setInterval(() => { try { runScheduledJobs(registry); } catch (err) { console.error('[jobs]', err.message); } }, 60000).unref();
 
 app.listen(port, () => {
   console.log(`Clinovara backend  → http://localhost:${port}`);

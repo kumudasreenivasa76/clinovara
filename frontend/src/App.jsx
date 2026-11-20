@@ -123,32 +123,18 @@ function Shell({ hash, session }) {
   const Page = item.page;
   const locations = health?.locations || [];
   const showSetup = onboarding && !onboarding.completed && me.canManage;
+  // Where we are, for the top bar: "Front desk / Schedule", or the doctor's current tab.
+  const docTab = ws === 'doctor' && route === '#/doctor' ? DOCTOR_TABS.find((x) => x.id === (new URLSearchParams(hash.split('?')[1] || '').get('tab') || 'today')) : null;
+  const crumbGroup = docTab ? 'My home' : item.group;
+  const crumbLabel = docTab ? docTab.label : item.label;
   return (
     <div className="shell">
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-mark"><Logo /></div>
-          <div><div className="brand-name">Clinovara</div><div className="brand-sub">{me.tenant?.name}</div></div>
+          <div className="grow"><div className="brand-name">Clinovara</div><div className="brand-sub truncate">{me.tenant?.name}</div></div>
         </div>
-        {ws !== 'doctor' && locations.length > 1 && (
-          <div className="row gap-6" style={{ padding: '0 8px 10px' }} title="Branch shown on Arrivals, Schedule, Patients and Insights">
-            <IconBuildingHospital size={16} className="muted" />
-            <select className="input" style={{ padding: '5px 8px', fontSize: 12.5 }} value={branch} onChange={(e) => setBranch(e.target.value)}>
-              <option value="">All branches</option>
-              {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-            </select>
-          </div>
-        )}
-        {realWs === 'admin' && (
-          <div className="row gap-6" style={{ padding: '0 8px 10px' }} title="Preview what the front desk or a doctor sees">
-            <IconEye size={16} className="muted" />
-            <select className="input" style={{ padding: '5px 8px', fontSize: 12.5 }} value={viewAs} onChange={(e) => { setViewAs(e.target.value); try { localStorage.setItem('clinovara.viewAs', e.target.value); } catch { /* ignore */ } navigate(WS_HOME[e.target.value || 'admin']); }}>
-              {['admin', 'front_desk', 'doctor'].map((k) => <option key={k} value={k === 'admin' ? '' : k}>{WS_LABEL[k]}</option>)}
-            </select>
-          </div>
-        )}
-        {showSetup && <a href="#/onboarding" className="setup-banner"><IconRocket size={16} /><div><div className="strong">Finish setup · {onboarding.percent}%</div><div className="tiny">Go live checklist</div></div></a>}
-        <button className="assist-nav" onClick={() => window.dispatchEvent(new Event('clinovara:assistant'))}><IconMessageCircle size={18} /><span>Ask assistant</span><kbd>Ctrl /</kbd></button>
+        {showSetup && <a href="#/onboarding" className="setup-banner"><IconRocket size={16} /><div className="grow"><div className="strong">Finish setup · {onboarding.percent}%</div><div className="tiny">Go live checklist</div><div className="setup-track"><i style={{ width: `${onboarding.percent}%` }} /></div></div></a>}
         <nav className="nav col gap-4">
           {ws === 'doctor' && DOCTOR_TABS.map((x) => { const cur = new URLSearchParams(hash.split('?')[1] || '').get('tab') || 'today'; const on = route === '#/doctor' && cur === x.id; return <a key={x.id} href={`#/doctor?tab=${x.id}`} className={on ? 'active' : ''}><x.icon size={18} />{x.label}</a>; })}
           {sidebarItems.filter((n) => !(ws === 'doctor' && n.to === '#/doctor')).map((n, idx, arr) => (
@@ -190,7 +176,36 @@ function Shell({ hash, session }) {
           </div>
         </div>
       </aside>
-      <main className="main"><Page hash={hash} branch={branch} locations={locations} me={me} session={session} workspace={ws} /></main>
+      <div className="workspace">
+        <header className="topbar">
+          <div className="crumbs truncate">
+            <span>{me.tenant?.name}</span>
+            {crumbGroup && <><i>/</i><span>{crumbGroup}</span></>}
+            <i>/</i><b>{crumbLabel}</b>
+          </div>
+          <div className="topbar-tools">
+            {ws !== 'doctor' && locations.length > 1 && (
+              <label className="tb-select" title="Branch shown on Arrivals, Schedule, Patients and Insights">
+                <IconBuildingHospital size={16} />
+                <select value={branch} onChange={(e) => setBranch(e.target.value)} aria-label="Branch">
+                  <option value="">All branches</option>
+                  {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                </select>
+              </label>
+            )}
+            {realWs === 'admin' && (
+              <label className="tb-select" title="Preview what the front desk or a doctor sees">
+                <IconEye size={16} />
+                <select value={viewAs} aria-label="View as" onChange={(e) => { setViewAs(e.target.value); try { localStorage.setItem('clinovara.viewAs', e.target.value); } catch { /* ignore */ } navigate(WS_HOME[e.target.value || 'admin']); }}>
+                  {['admin', 'front_desk', 'doctor'].map((k) => <option key={k} value={k === 'admin' ? '' : k}>{WS_LABEL[k]}</option>)}
+                </select>
+              </label>
+            )}
+            <button className="assist-nav" onClick={() => window.dispatchEvent(new Event('clinovara:assistant'))}><IconMessageCircle size={16} /><span>Ask assistant</span><kbd>Ctrl /</kbd></button>
+          </div>
+        </header>
+        <main className="main"><Page hash={hash} branch={branch} locations={locations} me={me} session={session} workspace={ws} /></main>
+      </div>
       <Assistant role={me.role} />
     </div>
   );

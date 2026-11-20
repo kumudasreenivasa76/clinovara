@@ -8,7 +8,7 @@ import { PageHeader, ApptTable, ActionList, MetricTile, TrendChart, Heatmap, Sta
 const safe = (p, fallback) => p.catch(() => fallback);
 const compact = (v) => (v >= 1e7 ? `₹${(v / 1e7).toFixed(1)}Cr` : v >= 1e5 ? `₹${(v / 1e5).toFixed(1)}L` : v >= 1e3 ? `₹${Math.round(v / 1e3)}k` : `₹${Math.round(v)}`);
 const STATUS = { completed: 'Completed', scheduled: 'Scheduled', confirmed: 'Confirmed', arrived: 'Arrived', no_show: 'No-show', cancelled: 'Cancelled' };
-const STATUS_TONE = { Completed: 'var(--good)', Scheduled: '#8da4b8', Confirmed: 'var(--accent)', Arrived: '#4f7aa6', 'No-show': 'var(--bad)', Cancelled: '#c9cfcc' };
+const STATUS_TONE = { Completed: 'var(--good)', Scheduled: '#93c5fd', Confirmed: 'var(--accent)', Arrived: '#60a5fa', 'No-show': 'var(--bad)', Cancelled: '#cbd5e1' };
 
 /** Owner and admin home: how the clinic is doing against the last period, today's appointments, what needs a decision, and where time and money go. */
 export default function Overview({ branch, locations, me }) {

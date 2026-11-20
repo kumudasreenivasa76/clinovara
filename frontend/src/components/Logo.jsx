@@ -1,11 +1,17 @@
-import React from 'react';
+import React, { useId } from 'react';
 
-/** Clinovara mark: a molar crown drawn as two rounded lobes over a single root line, with a check for "seen". */
+/** Clinovara mark: the blue gradient "C" around a tooth, with the green "live" dot and signal arc (same as /brand/clinovara-mark.svg). */
 export default function Logo({ size = 22 }) {
+  const gid = `cvm-${useId().replace(/:/g, '')}`;
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M6.5 3.5c1.6 0 2.6.9 3.3 1.6.6.6 1.2.9 2.2.9s1.6-.3 2.2-.9c.7-.7 1.7-1.6 3.3-1.6 2.4 0 4 1.9 4 4.6 0 3.6-2.1 6.9-3.1 10.4-.3 1.2-.9 2.5-2 2.5-1.3 0-1.6-1.4-1.9-2.6-.3-1.3-.8-2.2-2.5-2.2s-2.2.9-2.5 2.2c-.3 1.2-.6 2.6-1.9 2.6-1.1 0-1.7-1.3-2-2.5C4.6 15 2.5 11.7 2.5 8.1c0-2.7 1.6-4.6 4-4.6z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-      <path d="M8.6 10.3l2.3 2.3 4.6-4.6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" aria-hidden="true">
+      <defs>
+        <linearGradient id={gid} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#60A5FA" /><stop offset="1" stopColor="#2563EB" /></linearGradient>
+      </defs>
+      <path d="M48.85 17.86 A22 22 0 1 0 48.85 46.14" stroke={`url(#${gid})`} strokeWidth="8" strokeLinecap="round" />
+      <path d="M30 22 C27 22 24 25 24 29 C24 32 26 33 27 37 C28 41 28.5 43 30 43 C31.5 43 31.5 38 32 38 C32.5 38 32.5 43 34 43 C35.5 43 36 41 37 37 C38 33 40 32 40 29 C40 25 37 22 34 22 C33 22 32.5 23 32 23 C31.5 23 31 22 30 22 Z" fill="#2563EB" />
+      <circle cx="53" cy="32" r="4.5" fill="#34D399" />
+      <path d="M59.8 20.76 A30 30 0 0 1 59.8 43.24" stroke="#93C5FD" strokeWidth="3.5" strokeLinecap="round" />
     </svg>
   );
 }

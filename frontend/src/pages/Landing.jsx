@@ -757,9 +757,13 @@ function DemoSection() {
             <p className="cv-sub">A 30-minute video call with someone who knows the product. No slides: we use the real thing, and we leave time for your questions.</p>
           </div>
           <Agenda items={meta?.agenda?.length ? meta.agenda : FALLBACK_AGENDA} />
-          <div className="cv-prep"><IconBulb size={18} /><div><b>Helpful to have open</b>Your current appointment book or software, and a rough idea of how many dentists and chairs you run.</div></div>
         </div>
-        <Reveal delay={100}><DemoBooking source="demo-section" title="Pick a time that suits you" /></Reveal>
+        <Reveal delay={100}>
+          <div className="cv-demo-side">
+            <DemoBooking source="demo-section" title="Pick a time that suits you" />
+            <div className="cv-prep"><IconBulb size={18} /><div><b>Helpful to have open</b>Your current appointment book or software, and a rough idea of how many dentists and chairs you run.</div></div>
+          </div>
+        </Reveal>
       </div>
     </section>
   );

@@ -305,7 +305,43 @@
 
 /* demo booking */
 .cv-demo { display: grid; gap: 40px; align-items: start; }
-@media (min-width: 1024px) { .cv-demo { grid-template-columns: 1fr 1fr; gap: 56px; } }
+.cv-demo-side { display: grid; gap: 16px; }
+.cv-demo-side .cv-prep { margin-top: 0; }
+/* On laptops and desktops the whole section (copy, agenda and the booking card) fits one screen under the sticky nav. */
+#demo { scroll-margin-top: 72px; }
+@media (min-width: 1024px) {
+  #demo.cv-sec { min-height: calc(100vh - 72px); min-height: calc(100svh - 72px); display: flex; align-items: center; padding: 40px 0; }
+  #demo > .cv-wrap { width: 100%; }
+  .cv-demo { grid-template-columns: 1.05fr .95fr; gap: 48px; align-items: center; }
+  #demo .cv-sub { margin-top: 12px !important; font-size: 16px; line-height: 1.6; }
+  #demo .cv-agenda { margin-top: 22px; }
+  #demo .cv-agenda .hd { padding: 10px 18px; }
+  #demo .cv-agenda .row { padding: 9px 18px; }
+  #demo .cv-agenda .row p { line-height: 1.4; }
+}
+/* Step 2 (the details form) gets the same one-screen treatment: tighter fields, and the prep tip steps aside. */
+@media (min-width: 1024px) {
+  #demo .cv-demo-side:has(.cv-form) .cv-prep { display: none; }
+  #demo .cv-form { gap: 10px; }
+  #demo .cv-field { gap: 4px; }
+  #demo .cv-input { padding-top: 8px; padding-bottom: 8px; }
+  #demo textarea.cv-input { min-height: 56px; height: 56px; }
+  #demo .cv-tiny { margin-top: 8px; }
+}
+/* Short laptop screens (768px tall and under): tighten further. */
+@media (min-width: 1024px) and (max-height: 780px) {
+  #demo.cv-sec { padding: 28px 0; }
+  #demo .cv-h2 { font-size: 32px; margin-top: 10px !important; }
+  #demo .cv-sub { font-size: 15px; }
+  #demo .cv-agenda { margin-top: 16px; }
+  #demo .cv-agenda .row { padding: 8px 18px; }
+  #demo .cv-agenda .row p { font-size: 12.5px; }
+  #demo .cv-book-hd { padding: 20px 24px 0; }
+  #demo .cv-progress { margin-top: 14px; }
+  #demo .cv-book-bd { padding: 16px 24px 22px; }
+  #demo .cv-actions { margin-top: 18px; }
+  #demo .cv-prep { padding: 10px 14px; font-size: 13px; }
+}
 .cv-agenda { margin-top: 28px; border-radius: 24px; background: #fff; border: 1px solid var(--s100); box-shadow: var(--sh-sm); overflow: hidden; }
 .cv-agenda .hd { display: flex; align-items: center; gap: 8px; padding: 14px 20px; border-bottom: 1px solid var(--s100); font-size: 13px; font-weight: 700; color: var(--b700); background: rgba(239,246,255,.6); }
 .cv-agenda .row { display: flex; gap: 14px; align-items: flex-start; padding: 14px 20px; border-bottom: 1px solid var(--s100); }

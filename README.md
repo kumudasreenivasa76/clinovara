@@ -2,6 +2,8 @@
 
 React + Express product for dental clinics and multi-branch dental hospitals. Clinics register, set up, and go live on their own; every clinic has isolated data. Demo clinic: **SmileCare Dental**, two branches in Bengaluru.
 
+> **How it works, in detail:** architecture, data, roles, every workspace, the API, security and what is not built yet are in [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md).
+
 ## Run it
 
 ```

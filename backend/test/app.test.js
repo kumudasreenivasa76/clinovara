@@ -1356,3 +1356,46 @@ describe('roles and permissions', () => {
     expect(matrix.matrix.find((x) => /Integrations/.test(x.area)).roles).toEqual(['owner', 'admin']);
   });
 });
+
+describe('api behaviour', () => {
+  const rawRes = async (method, path, headers = {}, body) => {
+    const server = app.listen(0); const port = server.address().port;
+    try { const res = await fetch('http://127.0.0.1:' + port + path, { method, headers: { 'content-type': 'application/json', ...headers }, body }); return { status: res.status, headers: res.headers, body: await res.json().catch(() => null) }; }
+    finally { server.close(); }
+  };
+  it('labels every reply, never caches patient data, and gives errors a code without leaking internals', async () => {
+    const auth = { authorization: 'Bearer ' + token };
+    const ok = await rawRes('GET', '/api/patients?limit=5&offset=2', auth);
+    expect(ok.status).toBe(200); expect(ok.body).toHaveLength(5);
+    expect(Number(ok.headers.get('x-total-count'))).toBeGreaterThan(5);
+    expect(ok.headers.get('cache-control')).toBe('no-store');
+    expect(ok.headers.get('x-request-id')).toMatch(/^[0-9a-f-]{8,}$/);
+    // Without paging the whole list still comes back, as before, with family and the next appointment attached.
+    const all = await rawRes('GET', '/api/patients', auth);
+    expect(all.body.length).toBe(Number(all.headers.get('x-total-count')));
+    expect(all.body[0]).toHaveProperty('upcoming'); expect(all.body[0]).toHaveProperty('family');
+    expect(all.body.slice(2, 7).map((p) => p.id)).toEqual(ok.body.map((p) => p.id));
+
+    const out = await rawRes('GET', '/api/appointments');
+    expect(out.status).toBe(401); expect(out.body.code).toBe('not_logged_in'); expect(out.body.requestId).toBe(out.headers.get('x-request-id'));
+    const missing = await rawRes('GET', '/api/nothing-here', auth);
+    expect(missing.status).toBe(404); expect(missing.body.code).toBe('not_found');
+    const broken = await rawRes('POST', '/api/patients', auth, '{not json');
+    expect(broken.status).toBe(400); expect(broken.body.error).toBe('The request body is not valid JSON'); expect(broken.body.code).toBe('invalid_request');
+    const desk = (await raw('POST', '/api/auth/demo', { role: 'front_desk' })).body.token;
+    expect((await rawRes('GET', '/api/team', { authorization: 'Bearer ' + desk })).body.code).toBe('not_allowed');
+  });
+
+  it('answers only the listed websites when an allow-list is set', async () => {
+    const open = await rawRes('GET', '/api/health', { origin: 'https://anything.example' });
+    expect(open.headers.get('access-control-allow-origin')).toBe('*');
+    process.env.CLINOVARA_ALLOWED_ORIGINS = 'https://app.clinic.example, https://clinic.example/';
+    try {
+      expect((await rawRes('GET', '/api/health', { origin: 'https://app.clinic.example' })).headers.get('access-control-allow-origin')).toBe('https://app.clinic.example');
+      expect((await rawRes('GET', '/api/health', { origin: 'https://clinic.example' })).headers.get('access-control-allow-origin')).toBe('https://clinic.example');
+      const other = await rawRes('GET', '/api/health', { origin: 'https://evil.example' });
+      expect(other.headers.get('access-control-allow-origin')).toBeNull(); expect(other.headers.get('vary')).toMatch(/Origin/);
+      expect((await rawRes('GET', '/api/health')).status).toBe(200); // a server-to-server call has no Origin and still works
+    } finally { delete process.env.CLINOVARA_ALLOWED_ORIGINS; }
+  });
+});

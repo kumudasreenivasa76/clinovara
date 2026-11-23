@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -95,10 +96,24 @@ export function createApp({ registry = createRegistry(), frontendBase = process.
   if (process.env.NODE_ENV === 'production') app.set('trust proxy', 1);
   app.use(express.json({ limit: '8mb', type: ['application/json', 'application/fhir+json'] }));
   app.use((req, res, next) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-user-name, x-api-key, x-tenant, Authorization');
+    // Every request gets an id. It is returned in a header and in error replies, and printed with server errors,
+    // so a problem a person reports can be matched to the log line.
+    req.id = crypto.randomUUID().slice(0, 13);
+    res.setHeader('X-Request-Id', req.id);
+    const started = Date.now();
+    res.on('finish', () => { const ms = Date.now() - started; if (ms > 1500 && process.env.NODE_ENV !== 'test') console.warn(`[slow] ${req.method} ${req.path} took ${ms} ms (request ${req.id})`); });
+    // Which websites may call the API from a browser. CLINOVARA_ALLOWED_ORIGINS is a comma-separated list;
+    // unset means any site, which suits local development. Requests without an Origin (servers, the phone bridge) are unaffected.
+    const allowed = (process.env.CLINOVARA_ALLOWED_ORIGINS || '').split(',').map((x) => x.trim().replace(/\/$/, '')).filter(Boolean);
+    const origin = req.get('origin');
+    if (!allowed.length) res.setHeader('Access-Control-Allow-Origin', '*');
+    else { res.setHeader('Vary', 'Origin'); if (origin && allowed.includes(origin.replace(/\/$/, ''))) res.setHeader('Access-Control-Allow-Origin', origin); }
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-user-name, x-api-key, x-tenant, x-voice-secret, Authorization');
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Expose-Headers', 'X-Request-Id, X-Total-Count, Retry-After');
     if (req.method === 'OPTIONS') return res.sendStatus(204);
+    // Patient data must not sit in a browser or proxy cache.
+    if (req.path.startsWith('/api/')) res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'SAMEORIGIN');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
@@ -196,12 +211,15 @@ export function createApp({ registry = createRegistry(), frontendBase = process.
     app.get(/^(?!\/api).*/, (req, res) => res.sendFile(path.join(dist, 'index.html')));
   }
 
-  app.use((req, res) => res.status(404).json({ error: `No route for ${req.method} ${req.path}` }));
+  const CODES = { 400: 'invalid_request', 401: 'not_logged_in', 403: 'not_allowed', 404: 'not_found', 409: 'conflict', 410: 'expired', 413: 'too_large', 429: 'too_many_requests', 502: 'provider_unreachable', 503: 'not_configured' };
+  app.use((req, res) => res.status(404).json({ error: `No route for ${req.method} ${req.path}`, code: 'not_found', requestId: req.id }));
   app.use((err, req, res, next) => {
     void next;
-    const status = err instanceof HttpError ? err.status : (err.type === 'entity.parse.failed' ? 400 : 500);
-    if (status === 500) console.error(err);
-    res.status(status).json({ error: err.message || 'Unexpected error' });
+    const status = err instanceof HttpError ? err.status : (err.type === 'entity.parse.failed' ? 400 : err.type === 'entity.too.large' ? 413 : 500);
+    // An unexpected failure is logged in full with its request id; the caller gets a plain message, never internal details.
+    if (status === 500) { console.error(`[error] ${req.method} ${req.path} (request ${req.id})`, err); return res.status(500).json({ error: 'Something went wrong on our side. Please try again.', code: 'server_error', requestId: req.id }); }
+    const message = err.type === 'entity.parse.failed' ? 'The request body is not valid JSON' : err.type === 'entity.too.large' ? 'That upload is too large' : err.message || 'Unexpected error';
+    res.status(status).json({ error: message, code: CODES[status] || 'error', requestId: req.id });
   });
   return app;
 }

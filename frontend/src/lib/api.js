@@ -26,20 +26,49 @@ export function setUserName(name) { memUser = name || ''; try { localStorage.set
 const listeners = new Set();
 export function onUnauthorized(fn) { listeners.add(fn); return () => listeners.delete(fn); }
 
+/** Tells the app whether the server can be reached, so it can show one banner instead of an error on every card. */
+function reach(ok) { try { window.dispatchEvent(new CustomEvent('clinovara:reach', { detail: { ok } })); } catch { /* not in a browser */ } }
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const TIMEOUT_MS = 20000;
+const inFlight = new Map(); // identical reads asked for at the same moment share one request
+
+async function send(method, path, body, headers) {
+  const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
+  try { return await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: ctl.signal }); }
+  catch (e) {
+    const err = new Error(e.name === 'AbortError' ? 'The server took too long to answer. Please try again.' : 'Cannot reach the server. Check your internet connection and try again.');
+    err.status = 0; err.network = true; throw err;
+  } finally { clearTimeout(timer); }
+}
+
 export async function api(method, path, body, extra = {}) {
   const headers = { 'content-type': 'application/json', ...extra };
   const token = getToken(); if (token) headers.authorization = `Bearer ${token}`;
   const tenant = getTenant(); if (tenant) headers['x-tenant'] = tenant;
-  const res = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-  let data = null;
-  try { data = await res.json(); } catch { /* no body */ }
-  if (!res.ok) {
-    const err = new Error(data?.error || `${res.status} ${res.statusText}`);
-    err.status = res.status;
-    if (res.status === 401 && token && !path.startsWith('/api/auth/')) { setToken(''); listeners.forEach((fn) => fn()); }
-    throw err;
-  }
-  return data;
+  const read = method === 'GET';
+  const key = read ? `${path}|${token}|${tenant}` : null;
+  if (key && inFlight.has(key)) return inFlight.get(key);
+  const work = (async () => {
+    let res;
+    // A read is safe to repeat, so one hiccup (a dropped connection, a restarting server) is retried once. Changes are never repeated.
+    for (let attempt = 0; ; attempt++) {
+      try { res = await send(method, path, body, headers); } catch (e) { if (read && attempt === 0) { await sleep(600); continue; } reach(false); throw e; }
+      if (read && attempt === 0 && [502, 503, 504].includes(res.status)) { await sleep(600); continue; }
+      break;
+    }
+    reach(true);
+    let data = null;
+    try { data = await res.json(); } catch { /* no body */ }
+    if (!res.ok) {
+      const err = new Error(data?.error || (res.status >= 500 ? 'Something went wrong on our side. Please try again.' : `${res.status} ${res.statusText}`));
+      err.status = res.status; err.code = data?.code || null; err.requestId = data?.requestId || res.headers.get('x-request-id') || null;
+      if (res.status === 401 && token && !path.startsWith('/api/auth/')) { setToken(''); listeners.forEach((fn) => fn()); }
+      throw err;
+    }
+    return data;
+  })();
+  if (key) { inFlight.set(key, work); work.finally(() => inFlight.delete(key)).catch(() => {}); }
+  return work;
 }
 export const get = (path, extra) => api('GET', path, undefined, extra);
 export const post = (path, body = {}, extra) => api('POST', path, body, extra);

@@ -20,7 +20,16 @@ r.get('/', (req, res) => {
   if (req.query.locationId) list = list.filter((p) => p.locationId === req.query.locationId);
   if (q) list = list.filter((p) => fullName(p).toLowerCase().includes(q) || (digits(q, cc) && digits(p.phone, cc).includes(digits(q, cc))) || (p.email || '').toLowerCase().includes(q) || p.dob === q || (p.abhaNumber || '').replace(/\D/g, '').includes(q.replace(/\D/g, '') || '§'));
   const now = nowIso();
-  res.json(list.map((p) => ({ ...p, upcoming: db.appointments.filter((a) => a.patientId === p.id && ['scheduled', 'confirmed'].includes(a.status) && a.start > now).sort((a, b) => a.start.localeCompare(b.start))[0] || null, family: db.patients.filter((x) => x.id !== p.id && x.phone && x.phone === p.phone).map((x) => ({ id: x.id, name: fullName(x) })) })));
+  // Index once: the next upcoming appointment per patient, and who shares each phone number.
+  const upcoming = new Map();
+  for (const a of db.appointments) { if (!['scheduled', 'confirmed'].includes(a.status) || a.start <= now) continue; const cur = upcoming.get(a.patientId); if (!cur || a.start < cur.start) upcoming.set(a.patientId, a); }
+  const byPhone = new Map();
+  for (const x of db.patients) { if (!x.phone) continue; (byPhone.get(x.phone) || byPhone.set(x.phone, []).get(x.phone)).push(x); }
+  // Paging is optional so existing screens keep getting the whole list; the total is always in X-Total-Count.
+  res.setHeader('X-Total-Count', String(list.length));
+  const limit = Math.min(500, Math.max(0, Number(req.query.limit) || 0)); const offset = Math.max(0, Number(req.query.offset) || 0);
+  if (limit) list = list.slice(offset, offset + limit);
+  res.json(list.map((p) => ({ ...p, upcoming: upcoming.get(p.id) || null, family: (p.phone ? byPhone.get(p.phone) || [] : []).filter((x) => x.id !== p.id).map((x) => ({ id: x.id, name: fullName(x) })) })));
 });
 
 r.get('/export.csv', (req, res) => {

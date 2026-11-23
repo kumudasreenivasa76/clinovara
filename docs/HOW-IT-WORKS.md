@@ -101,7 +101,9 @@ Every request under `/api` passes through one middleware in `backend/src/app.js`
 
 **May this role do this?** For logged-in staff, the request is checked against the role table (`ROLE_RULES` in `app.js`). If a rule matches the path and method and the role is not listed, the reply is `403`. This runs before the route, so a screen hidden in the app is also closed on the server.
 
-After the route runs, `req.store.save()` writes the clinic's file. Errors thrown as `HttpError(status, message)` become JSON replies of the form `{ "error": "..." }`.
+After the route runs, `req.store.save()` writes the clinic's file.
+
+Every reply carries an `X-Request-Id` header, and API replies are sent with `Cache-Control: no-store` so patient data is not kept in a browser or proxy cache. Errors thrown as `HttpError(status, message)` become JSON replies of the form `{ "error": "...", "code": "...", "requestId": "..." }`. The codes are `invalid_request`, `not_logged_in`, `not_allowed`, `not_found`, `conflict`, `expired`, `too_large`, `too_many_requests`, `provider_unreachable`, `not_configured` and `server_error`. An unexpected failure is logged on the server with its request id; the caller gets a plain message and never the internal error text. Requests slower than 1.5 seconds are logged.
 
 ## 5. Data
 
@@ -375,7 +377,7 @@ When a provider is not connected, messages are recorded in `communications` as s
 - Two-factor login.
 - A searchable audit log. `activity` is a rolling list of recent events, not a full audit trail with before and after values.
 - Custom roles or per-person permissions.
-- A restricted CORS origin: the API currently accepts requests from any site. It uses bearer tokens, not cookies, which limits the exposure, but it should be narrowed to the real frontend address in production.
+- A default restriction on which websites may call the API. Until `CLINOVARA_ALLOWED_ORIGINS` is set, any site may. The API uses bearer tokens, not cookies, which limits the exposure, but set the variable in production.
 
 ## 14. Configuration
 
@@ -388,6 +390,7 @@ All settings are environment variables, read from `backend/.env` in development.
 | `CLINOVARA_FRONTEND_URL` | Base address used in links sent to patients | The request's own address |
 | `CLINOVARA_DATA_DIR` | Where data files are kept | `backend/data` |
 | `CLINOVARA_DATA_KEY` | Encrypts data files | Files are plain JSON |
+| `CLINOVARA_ALLOWED_ORIGINS` | Websites allowed to call the API from a browser, comma separated | Any website |
 | `ANTHROPIC_API_KEY` | Turns on Claude | Rule engine |
 | `CLINOVARA_AI` | Force `rules` or `claude` | Decided by whether a key is present |
 | `RESEND_API_KEY`, `MAIL_FROM` | Email | No email is sent; codes show on screen in development |
@@ -402,7 +405,9 @@ The voice and carrier keys are read only to report whether they are set. The ser
 
 ## 15. API reference
 
-All paths are under `/api`. Replies are JSON. Errors are `{ "error": "message" }` with a 4xx or 5xx status. Staff calls send `Authorization: Bearer <token>`.
+All paths are under `/api`. Replies are JSON. Errors are `{ "error": "message", "code": "...", "requestId": "..." }` with a 4xx or 5xx status. Staff calls send `Authorization: Bearer <token>`.
+
+The frontend's API client (`frontend/src/lib/api.js`) gives up on a request after 20 seconds, retries a read once if the connection drops or the server answers 502, 503 or 504, never repeats a change, and shares one request between screens that ask for the same thing at the same moment. Screens that refresh on a timer pause while the browser tab is in the background. If the server cannot be reached, one banner says so and clears when a request gets through.
 
 ### Accounts
 
@@ -436,7 +441,7 @@ All paths are under `/api`. Replies are JSON. Errors are `{ "error": "message" }
 
 | Method and path | Purpose |
 |---|---|
-| `GET /patients`, `POST /patients`, `GET /patients/:id`, `PATCH /patients/:id` | Patient directory. `q` searches name, mobile and email |
+| `GET /patients`, `POST /patients`, `GET /patients/:id`, `PATCH /patients/:id` | Patient directory. `q` searches name, mobile and email. Optional `limit` and `offset`; the total is in the `X-Total-Count` header |
 | `GET /patients/export.csv`, `POST /patients/import` | Owner and admin only |
 | `GET /appointments`, `POST /appointments`, `GET /appointments/:id`, `PATCH /appointments/:id` | Bookings |
 | `POST /appointments/:id/confirm`, `/reschedule`, `/cancel` | Change a booking |
@@ -510,7 +515,7 @@ All paths are under `/api`. Replies are JSON. Errors are `{ "error": "message" }
 npm test
 ```
 
-103 tests in `backend/test/`, run against the real Express app with in-memory data and the rule engine. They need no keys and no network.
+105 tests in `backend/test/`, run against the real Express app with in-memory data and the rule engine. They need no keys and no network.
 
 Scenarios covered end to end:
 
@@ -555,5 +560,5 @@ The repository does not prescribe a host. Whatever you choose:
 - Set `NODE_ENV=production`, and `CLINOVARA_FRONTEND_URL` to the public address so links in messages are correct.
 - Keep the data directory on storage that survives restarts and is backed up (`npm run backup`).
 - Set `CLINOVARA_DATA_KEY` before real patient data goes in, and store the key separately from the data.
-- Narrow the allowed CORS origin in `backend/src/app.js` to your frontend's address.
+- Set `CLINOVARA_ALLOWED_ORIGINS` to your frontend's address.
 - Add the provider keys you need, then check Settings → Integrations and send a test email.

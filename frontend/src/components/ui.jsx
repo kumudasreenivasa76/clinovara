@@ -33,23 +33,45 @@ export function useAction() {
   return [run, busy];
 }
 
-/** Polls a loader. */
+/**
+ * Loads data and keeps it fresh. A slow request is never doubled up, polling stops while the tab is in the
+ * background, and the data refreshes at once when the person comes back to it.
+ */
 export function usePoll(loader, deps = [], intervalMs = 0) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const alive = useRef(true);
+  const running = useRef(false);
   const reload = useCallback(async () => {
+    if (running.current) return;
+    running.current = true;
     try { const d = await loader(); if (alive.current) { setData(d); setError(null); } }
     catch (e) { if (alive.current) setError(e); }
-    finally { if (alive.current) setLoading(false); }
+    finally { running.current = false; if (alive.current) setLoading(false); }
   }, deps); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     alive.current = true; setLoading(true); reload();
-    const t = intervalMs ? setInterval(reload, intervalMs) : null;
-    return () => { alive.current = false; if (t) clearInterval(t); };
+    const tick = () => { if (typeof document === 'undefined' || !document.hidden) reload(); };
+    const t = intervalMs ? setInterval(tick, intervalMs) : null;
+    const back = () => { if (!document.hidden) reload(); };
+    if (intervalMs) document.addEventListener('visibilitychange', back);
+    return () => { alive.current = false; if (t) clearInterval(t); document.removeEventListener('visibilitychange', back); };
   }, [reload, intervalMs]);
   return { data, error, loading, reload, setData };
+}
+
+/** One quiet banner when the server cannot be reached, cleared as soon as a request gets through. */
+export function ReachBanner() {
+  const [down, setDown] = useState(false);
+  useEffect(() => {
+    let timer = null;
+    const on = (e) => { if (e.detail?.ok) { clearTimeout(timer); timer = null; setDown(false); } else if (!timer) timer = setTimeout(() => setDown(true), 1200); };
+    window.addEventListener('clinovara:reach', on);
+    return () => { window.removeEventListener('clinovara:reach', on); clearTimeout(timer); };
+  }, []);
+  if (!down) return null;
+  return <div className="reach-banner" role="status"><span className="dot" />Cannot reach the server. Your screen may be out of date. Trying again…</div>;
 }
 
 /* ---------- Primitives ---------- */

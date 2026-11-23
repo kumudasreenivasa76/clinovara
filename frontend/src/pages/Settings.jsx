@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { IconPlus, IconTrash, IconDownload, IconUpload, IconRefreshAlert, IconDeviceFloppy, IconKey, IconWebhook, IconPlugConnected, IconCopy, IconSend, IconLock, IconPhoneCall, IconLanguage, IconPlayerPlay } from '@tabler/icons-react';
+import { brandVars, BrandLogo, fileToLogo, logoColors, monogram, BRAND_PRESETS, DEFAULT_BRAND, readableOnWhite } from '../lib/brand.jsx';
+import { passwordOk } from '../lib/password.js';
+import { IconPlus, IconTrash, IconDownload, IconUpload, IconRefreshAlert, IconDeviceFloppy, IconKey, IconWebhook, IconPlugConnected, IconCopy, IconSend, IconLock, IconPhoneCall, IconLanguage, IconPlayerPlay, IconCheck } from '@tabler/icons-react';
 import { get, put, post, patch, del, downloadFile } from '../lib/api.js';
 import { TeamInvites } from './Onboarding.jsx';
 import { Card, Body, Field, useAction, Seg, Pill, Empty, useToast } from '../components/ui.jsx';
@@ -31,10 +33,11 @@ export default function Settings({ hash, me, session }) {
     <>
       <div className="page-head">
         <div><h1>Settings</h1><p>Everything the AI front desk is allowed to say and do, your branches and dentists, prices, schemes, languages, and integrations.</p></div>
-        {!['integrations', 'data', 'team', 'account'].includes(tab) && <button className="btn primary" disabled={busy} onClick={save}><IconDeviceFloppy size={16} />Save changes</button>}
+        {!['integrations', 'data', 'team', 'account', 'branding'].includes(tab) && <button className="btn primary" disabled={busy} onClick={save}><IconDeviceFloppy size={16} />Save changes</button>}
       </div>
-      <Seg value={tab} onChange={setTab} options={[{ value: 'practice', label: 'Practice' }, { value: 'branches', label: 'Branches' }, { value: 'visits', label: 'Visit types & dentists' }, { value: 'procedures', label: 'Procedures & fees' }, { value: 'faqs', label: 'Approved FAQs' }, { value: 'payments', label: 'Payments & schemes' }, { value: 'languages', label: 'Languages & templates' }, { value: 'rules', label: 'Rules & kiosk' }, { value: 'assistant', label: 'Virtual assistant' }, { value: 'team', label: 'Team' }, { value: 'integrations', label: 'Integrations' }, { value: 'data', label: 'Data' }, { value: 'account', label: 'My account' }]} />
+      <Seg value={tab} onChange={setTab} options={[{ value: 'practice', label: 'Practice' }, { value: 'branding', label: 'Branding' }, { value: 'branches', label: 'Branches' }, { value: 'visits', label: 'Visit types & dentists' }, { value: 'procedures', label: 'Procedures & fees' }, { value: 'faqs', label: 'Approved FAQs' }, { value: 'payments', label: 'Payments & schemes' }, { value: 'languages', label: 'Languages & templates' }, { value: 'rules', label: 'Rules & kiosk' }, { value: 'assistant', label: 'Virtual assistant' }, { value: 'team', label: 'Team' }, { value: 'integrations', label: 'Integrations' }, { value: 'data', label: 'Data' }, { value: 'account', label: 'My account' }]} />
       <div className="mt-16">
+        {tab === 'branding' && <BrandingTab s={s} up={up} slug={me?.tenant?.slug} />}
         {tab === 'practice' && (
           <div className="grid two">
             <Card title="Practice"><Body className="col">
@@ -191,7 +194,7 @@ export default function Settings({ hash, me, session }) {
           </div>
         )}
         {tab === 'assistant' && <AssistantTab s={s} up={up} />}
-        {tab === 'team' && <TeamInvites providers={s.providers} />}
+        {tab === 'team' && <><TeamInvites providers={s.providers} /><div className="mt-16"><RolesMatrix /></div></>}
         {tab === 'account' && <AccountTab me={me} session={session} />}
         {tab === 'integrations' && <IntegrationsTab />}
         {tab === 'data' && <DataTab reload={load} />}
@@ -247,6 +250,8 @@ function IntegrationsTab() {
   return (
     <div className="col gap-16">
       <StatusBoard status={status} cfg={cfg} />
+      <ConnectCards status={status} />
+      <VoiceCard />
       <Card title="Calendar feeds (Google, Outlook, Apple)" actions={<div className="row gap-6">{feeds?.enabled && <button className="btn sm ghost" onClick={() => run(async () => { await post('/api/calendar/key', { disable: true }); loadFeeds(); }, 'Feeds disabled')}>Disable</button>}<button className="btn sm" disabled={busy} onClick={() => run(async () => { await post('/api/calendar/key'); loadFeeds(); }, feeds?.enabled ? 'Feed links rotated' : 'Feeds enabled')}>{feeds?.enabled ? 'Rotate links' : 'Enable feeds'}</button></div>}>
         <Body className="col">
           <div className="small muted">Each dentist gets a private subscription link. In Google Calendar: Other calendars → + → From URL. In Outlook: Add calendar → Subscribe from web. On iPhone: Settings → Calendar → Accounts → Add subscribed calendar. Appointments and leave blocks appear within 15 minutes; patients get add-to-calendar links in their confirmations.</div>
@@ -333,8 +338,8 @@ function AccountTab({ me, session }) {
       </Body></Card>
       <Card title="Password"><Body className="col">
         <Field label="Current password"><input className="input" type="password" value={f.currentPassword} onChange={(e) => setF({ ...f, currentPassword: e.target.value })} /></Field>
-        <Field label="New password" hint="At least 8 characters"><input className="input" type="password" value={f.newPassword} onChange={(e) => setF({ ...f, newPassword: e.target.value })} /></Field>
-        <button className="btn" style={{ alignSelf: 'flex-start' }} disabled={busy || f.newPassword.length < 8} onClick={() => run(async () => { await patch('/api/auth/me', { currentPassword: f.currentPassword, newPassword: f.newPassword }); setF({ ...f, currentPassword: '', newPassword: '' }); }, 'Password changed')}>Change password</button>
+        <Field label="New password" hint="8+ characters with an uppercase letter, a lowercase letter, a number and a special character"><input className="input" type="password" value={f.newPassword} onChange={(e) => setF({ ...f, newPassword: e.target.value })} /></Field>
+        <button className="btn" style={{ alignSelf: 'flex-start' }} disabled={busy || !passwordOk(f.newPassword)} onClick={() => run(async () => { await patch('/api/auth/me', { currentPassword: f.currentPassword, newPassword: f.newPassword }); setF({ ...f, currentPassword: '', newPassword: '' }); }, 'Password changed')}>Change password</button>
         <div className="tiny muted">Your clinics: {me?.memberships?.map((m) => `${m.name} (${m.role.replace('_', ' ')})`).join(', ')}</div>
       </Body></Card>
     </div>
@@ -515,5 +520,192 @@ function StatusBoard({ status, cfg }) {
       <div className="review-row"><span className={`review-dot ${status.clinic.webhooks ? 'ok' : ''}`}>{status.clinic.webhooks ? '✓' : '–'}</span><div className="grow"><div className="small strong">Webhooks <Pill tone={status.clinic.webhooks ? 'good' : 'outline'}>{status.clinic.webhooks ? `${status.clinic.webhooks} active` : 'None'}</Pill></div><div className="tiny muted">Send events to billing, analytics or automation tools such as Zapier. Add one below.</div></div></div>
       {(o.simulated > 0 || o.failed > 0) && <div className="callout small">{o.sent} messages delivered, {o.simulated} waiting in the outbox because no WhatsApp or SMS provider is connected{o.failed ? `, ${o.failed} failed` : ''}.</div>}
     </Body></Card>
+  );
+}
+
+/** Email and AI: what is connected on this server, how to connect it, and a real test for email. */
+function ConnectCards({ status }) {
+  const [run, busy] = useAction();
+  const [to, setTo] = useState('');
+  const email = !!status?.server?.email; const ai = !!status?.server?.ai;
+  const valid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to);
+  return (
+    <div className="grid two">
+      <Card title="Email" actions={<span className={`pill ${email ? 'good' : 'warn'}`}>{email ? 'Connected' : 'Not connected'}</span>}>
+        <Body className="col gap-12">
+          <div className="small muted">{email
+            ? <>Verification codes, demo confirmations and receipts are sent through Resend from <b>{status.mailFrom}</b>.</>
+            : <>Email goes through Resend. On the server, open <span className="mono">backend/.env</span>, set <span className="mono">RESEND_API_KEY</span> and <span className="mono">MAIL_FROM</span> (an address on a domain you verified in Resend), then restart. Until then, codes are shown on screen in test builds and nothing is emailed.</>}</div>
+          <div className="row gap-6"><input className="input" type="email" placeholder="you@clinic.com" value={to} onChange={(e) => setTo(e.target.value)} aria-label="Send a test email to" /><button className="btn" disabled={busy || !valid} onClick={() => run(async () => { await post('/api/integrations/email/test', { to }); }, `Test email sent to ${to}`)}>Send test email</button></div>
+          {!email && <div className="tiny muted">The test will tell you email is not connected until the two keys are set.</div>}
+        </Body>
+      </Card>
+      <Card title="AI assistant" actions={<span className={`pill ${ai ? 'good' : 'outline'}`}>{ai ? 'Claude connected' : 'Rule engine'}</span>}>
+        <Body className="col gap-12">
+          <div className="small muted">{ai
+            ? 'The front desk chat, the call assistant and marketing drafts are answered by Claude, with your fees, hours and escalation rules applied on the server.'
+            : <>The front desk chat, call assistant and marketing drafts are running on the built-in rule engine. To use Claude, open <span className="mono">backend/.env</span> on the server, paste your key after <span className="mono">ANTHROPIC_API_KEY=</span> and restart. Nothing else changes.</>}</div>
+          <div className="tiny muted">Keys stay in the server environment. They are never stored in clinic settings or sent to the browser.</div>
+        </Body>
+      </Card>
+    </div>
+  );
+}
+
+/** Clinic logo, colour and kiosk welcome line. Saves on its own button and shows the result on every patient screen. */
+function BrandingTab({ s, up, slug }) {
+  const toast = useToast();
+  const [run, busy] = useAction();
+  const saved = { ...DEFAULT_BRAND, ...(s.branding || {}) };
+  const [b, setB] = useState(saved);
+  const [fromLogo, setFromLogo] = useState([]);
+  const [over, setOver] = useState(false);
+  const [err, setErr] = useState('');
+  const [view, setView] = useState('kiosk');
+  useEffect(() => { if (b.logo) logoColors(b.logo).then(setFromLogo); else setFromLogo([]); }, [b.logo]);
+  const dirty = JSON.stringify(b) !== JSON.stringify(saved);
+  const set = (p) => setB((x) => ({ ...x, ...p }));
+  const pick = async (file) => { if (!file) return; setErr(''); try { set({ logo: await fileToLogo(file) }); } catch (e) { setErr(e.message); } };
+  const save = () => run(async () => { const next = await put('/api/settings', { branding: b }); up({ branding: next.branding }); setB({ ...DEFAULT_BRAND, ...next.branding }); window.dispatchEvent(new CustomEvent('clinovara:branding', { detail: next.branding })); }, 'Branding saved. Patient screens now use it.');
+  const name = s.practice?.name || 'Your clinic';
+  const q = slug ? `?t=${slug}` : '';
+  const light = !readableOnWhite(b.color);
+  return (
+    <div className="brand-page">
+      <div className="col gap-16">
+        <Card title="Clinic logo">
+          <Body className="col gap-12">
+            <label className={`brand-zone ${over ? 'over' : ''} ${b.logo ? 'has' : ''}`} onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)} onDrop={(e) => { e.preventDefault(); setOver(false); pick(e.dataTransfer.files?.[0]); }}>
+              <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ''; }} />
+              {b.logo ? <img src={b.logo} alt="Clinic logo" /> : <span className="brand-mono" style={{ width: 64, height: 64, fontSize: 24, background: b.color }}>{monogram(name)}</span>}
+              <span className="txt"><b>{b.logo ? 'Replace logo' : 'Upload your logo'}</b><span>Drag an image here or click to choose. PNG, JPG, WebP or SVG.</span></span>
+            </label>
+            {err && <div className="callout bad small">{err}</div>}
+            {b.logo ? (
+              <div className="row between wrap gap-8">
+                <div className="brand-on"><span className="on white"><img src={b.logo} alt="" /></span><span className="on dark"><img src={b.logo} alt="" /></span><span className="on tint" style={{ background: b.color }}><img src={b.logo} alt="" /></span></div>
+                <button className="btn sm ghost" onClick={() => set({ logo: '' })}>Remove logo</button>
+              </div>
+            ) : <div className="tiny muted">Until you add a logo, patients see your initials ({monogram(name)}) in your brand colour.</div>}
+            {b.logo && <div className="tiny muted">Checked on white, dark and your brand colour. If it disappears on one of them, upload a version with a solid background.</div>}
+          </Body>
+        </Card>
+
+        <Card title="Brand colour">
+          <Body className="col gap-12">
+            {fromLogo.length > 0 && <div><div className="field-label">From your logo</div><div className="brand-swatches mt-8">{fromLogo.map((c) => <button key={c} type="button" aria-label={`Use ${c}`} title={c} className={b.color === c ? 'on' : ''} style={{ background: c }} onClick={() => set({ color: c })} />)}</div></div>}
+            <div><div className="field-label">Presets</div><div className="brand-swatches mt-8">
+              {BRAND_PRESETS.map(([c, label]) => <button key={c} type="button" title={label} aria-label={label} className={b.color === c ? 'on' : ''} style={{ background: c }} onClick={() => set({ color: c })} />)}
+              <label className="brand-custom" title="Pick any colour"><input type="color" value={b.color} onChange={(e) => set({ color: e.target.value })} /><span className="mono tiny">{b.color}</span></label>
+            </div></div>
+            {light && <div className="callout small">This colour is light, so white text on buttons will be hard to read. Pick a darker shade.</div>}
+          </Body>
+        </Card>
+
+        <Card title="Kiosk welcome line">
+          <Body><Field label="Shown under your logo on the kiosk" hint="Optional. Leave blank to use the standard welcome in the patient’s language."><input className="input" maxLength={120} value={b.welcome} onChange={(e) => set({ welcome: e.target.value })} placeholder={`Welcome to ${name}`} /></Field></Body>
+        </Card>
+
+        <div className="brand-save">
+          <span className="small muted">{dirty ? 'You have unsaved branding changes.' : 'Branding is saved.'}</span>
+          <div className="row gap-8">{dirty && <button className="btn ghost" disabled={busy} onClick={() => { setB(saved); setErr(''); }}>Discard</button>}<button className="btn primary" disabled={busy || !dirty || light} onClick={save}>{busy ? 'Saving…' : 'Save branding'}</button></div>
+        </div>
+      </div>
+
+      <div className="col gap-16">
+        <Card title="Preview" actions={<Seg value={view} onChange={setView} options={[{ value: 'kiosk', label: 'Kiosk' }, { value: 'chat', label: 'Patient chat' }, { value: 'board', label: 'Display' }, { value: 'receipt', label: 'Receipt' }]} />}>
+          <Body>
+            <div className="brand-stage" style={brandVars(b)}>
+              {view === 'kiosk' && <div className="bp-kiosk big">
+                <BrandLogo branding={b} name={name} size={64} />
+                <div className="bp-title">{b.welcome || 'Welcome. Let’s get you checked in.'}</div>
+                <div className="bp-langs"><span className="on">English</span><span>हिन्दी</span><span>ಕನ್ನಡ</span></div>
+                <span className="bp-btn wide">Check in</span>
+              </div>}
+              {view === 'chat' && <div className="bp-chat">
+                <div className="bp-head"><BrandLogo branding={b} name={name} size={28} /><span>{name}</span></div>
+                <div className="bp-msg them">Can I book a cleaning for Saturday?</div>
+                <div className="bp-msg us">Yes. Saturday 9:00 am is free. Shall I book it?</div>
+                <div className="bp-msg them">Yes please</div>
+              </div>}
+              {view === 'board' && <div className="bp-board">
+                <div className="row gap-8"><BrandLogo branding={b} name={name} size={30} className="on-dark" /><b>{name}</b></div>
+                <div className="bp-token"><span>Now calling</span><b>A02</b></div>
+                <div className="bp-next"><span>Next</span><i>A03</i><i>A04</i><i>A05</i></div>
+              </div>}
+              {view === 'receipt' && <div className="bp-receipt">
+                <BrandLogo branding={b} name={name} size={40} /><b>{name}</b>
+                <div className="row between small"><span>Receipt SC/26-27/0042</span><span>Today</span></div>
+                <div className="row between small"><span>Cleaning and check-up</span><b>₹1,500</b></div>
+                <div className="tiny muted">Paid by UPI. Thank you.</div>
+              </div>}
+            </div>
+          </Body>
+        </Card>
+        <Card title="Where patients see it">
+          <div className="list">
+            {[['Kiosk check-in', `#/kiosk${q}`], ['Waiting-room display', `#/board${q}`], ['Patient chat', `#/patient${q}`], ['Clinic website and booking', `#/site${q}`]].map(([label, to]) => (
+              <a key={label} className="list-item clickable" href={to} target="_blank" rel="noreferrer" style={{ color: 'inherit', textDecoration: 'none' }}><IconCheck size={15} style={{ color: 'var(--good)' }} /><span className="grow small">{label}</span><span className="tiny muted">Open</span></a>))}
+            {['Pre-visit forms sent to patients', 'Printed and WhatsApp receipts', 'The sidebar of this app'].map((label) => <div key={label} className="list-item"><IconCheck size={15} style={{ color: 'var(--good)' }} /><span className="grow small">{label}</span></div>)}
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+/** Phone voice assistant: choose the provider, see which keys the server has, and copy the addresses the call bridge uses. */
+function VoiceCard() {
+  const [v, setV] = useState(null);
+  const [run, busy] = useAction();
+  const toast = useToast();
+  useEffect(() => { get('/api/voice/status').then(setV).catch(() => setV(false)); }, []);
+  if (v === null) return <div className="skeleton" />;
+  if (v === false) return null;
+  const s = v.settings;
+  const save = (p) => run(async () => setV(await put('/api/voice/settings', p)), 'Phone assistant settings saved');
+  const chosen = v.providers.find((p) => p.id === s.provider);
+  return (
+    <Card title="Phone voice assistant" actions={<span className={`pill ${v.ready ? 'good' : s.provider === 'none' ? 'outline' : 'warn'}`}>{v.ready ? 'Ready for calls' : s.provider === 'none' ? 'Not connected' : 'Setup incomplete'}</span>}>
+      <Body className="col gap-12">
+        <div className="small muted">Answers phone calls in the caller’s language and books into your real diary, using the same rules as WhatsApp and web chat. It never gives medical advice: clinical questions become a callback for your team.</div>
+        <div className="grid two">
+          <Field label="Voice provider" hint={chosen?.mode === 'speech' ? 'The model hears and speaks directly. Lowest delay, one vendor for voice.' : chosen?.mode === 'text' ? 'Speech is turned into text, Claude answers, and a separate voice speaks. More parts, more control over the voice.' : 'Choose one to see what it needs.'}>
+            <select className="input" value={s.provider} disabled={busy} onChange={(e) => save({ provider: e.target.value })}>{v.providers.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}</select>
+          </Field>
+          <Field label="Clinic phone number for the assistant" hint="The number you bought from your phone carrier."><input className="input" defaultValue={s.number} placeholder="+91 80 4123 4567" onBlur={(e) => e.target.value !== s.number && save({ number: e.target.value })} /></Field>
+        </div>
+        {s.provider !== 'none' && (<>
+          <div>
+            <div className="field-label">Keys on this server</div>
+            <div className="row gap-6 wrap mt-8">{[...(chosen?.needs || []), 'EXOTEL_SID', 'EXOTEL_API_KEY', 'EXOTEL_API_TOKEN', 'VOICE_WEBHOOK_SECRET'].map((k) => <span key={k} className={`pill ${v.keys[k] ? 'good' : 'warn'}`}>{v.keys[k] ? 'Set' : 'Missing'} · <span className="mono">{k}</span></span>)}</div>
+            {v.missing.length > 0 && <div className="tiny muted mt-8">Add the missing keys to <span className="mono">backend/.env</span> on the server and restart. Keys are never stored in clinic settings or sent to the browser.</div>}
+          </div>
+          <div>
+            <div className="field-label">Addresses for the call bridge</div>
+            <div className="list card soft mt-8">{Object.entries(v.webhooks).map(([k, url]) => <div key={k} className="list-item" style={{ padding: '8px 12px' }}><span className="small strong" style={{ width: 80 }}>{k}</span><span className="tiny mono muted grow" style={{ wordBreak: 'break-all' }}>{url}</span><button className="btn sm ghost" onClick={() => { navigator.clipboard?.writeText(url); toast('Copied'); }}>Copy</button></div>)}</div>
+            <div className="tiny muted mt-8">The bridge is the small service that carries the call audio between your carrier and the voice model. It sends the <span className="mono">x-voice-secret</span> header with every request.</div>
+          </div>
+          <label className="check"><input type="checkbox" checked={!!s.enabled} disabled={busy} onChange={(e) => save({ enabled: e.target.checked })} />Answer phone calls with the assistant</label>
+          {s.enabled && !v.ready && <div className="callout small">Switched on, but not ready: {v.missing.length} {v.missing.length === 1 ? 'key is' : 'keys are'} missing. Calls will not be answered until they are set.</div>}
+        </>)}
+      </Body>
+    </Card>
+  );
+}
+
+/** What each role can reach. Read from the server, so it always matches what is actually enforced. */
+function RolesMatrix() {
+  const [m, setM] = useState(null);
+  useEffect(() => { get('/api/auth/permissions').then(setM).catch(() => setM(false)); }, []);
+  if (!m) return null;
+  return (
+    <Card title="Roles and permissions">
+      <Body><div className="small muted">Each login has one role. These limits are enforced on the server, so hiding a menu item is never the only protection. Anything not listed here is available to every member of staff.</div></Body>
+      <div style={{ overflowX: 'auto' }}><table className="table">
+        <thead><tr><th>Area</th>{m.roles.map((r) => <th key={r.id} style={{ textAlign: 'center' }}>{r.label}</th>)}</tr></thead>
+        <tbody>{m.matrix.map((row) => <tr key={row.area}><td><span className="small strong">{row.area}</span>{row.access === 'change' && <span className="tiny muted"> (changes only)</span>}</td>{m.roles.map((r) => <td key={r.id} style={{ textAlign: 'center' }}>{row.roles.includes(r.id) ? <IconCheck size={16} style={{ color: 'var(--good)' }} aria-label="Allowed" /> : <span className="muted" aria-label="Not allowed">No</span>}</td>)}</tr>)}</tbody>
+      </table></div>
+    </Card>
   );
 }

@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import { id, nowIso, bad, find, log } from '../lib.js';
 import { EVENTS, emit, pending } from '../domain/webhooks.js';
 import { resend, outboxSummary } from '../domain/ehr.js';
-import { mailConfigured } from '../domain/mailer.js';
+import { mailConfigured, sendEmail } from '../domain/mailer.js';
 import { smsReady, whatsappReady } from '../domain/providers.js';
 import { aiMode } from '../domain/frontDesk.js';
 
@@ -15,9 +15,26 @@ r.get('/status', (req, res) => {
   const db = req.db; const c = cfg(db); const m = db.settings.marketing || {};
   res.json({
     server: { email: mailConfigured(), sms: smsReady(), whatsapp: whatsappReady(), ai: aiMode() === 'claude' },
+    mailFrom: mailConfigured() ? (process.env.MAIL_FROM || 'Clinovara <onboarding@resend.dev>') : null,
     clinic: { googleReview: !!m.googleReviewUrl, calendarFeeds: !!db.settings.calendarFeeds?.enabled || undefined, webhooks: c.webhooks.length, apiKey: !!c.apiKey },
     outbox: { simulated: db.communications.filter((x) => x.delivery === 'simulated').length, failed: db.communications.filter((x) => x.delivery === 'failed').length, sent: db.communications.filter((x) => x.delivery === 'sent').length },
   });
+});
+
+/** Sends one real email through the configured provider, so an owner can see delivery works before patients depend on it. */
+r.post('/email/test', async (req, res) => {
+  const to = String(req.body?.to || '').trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) bad('Enter a valid email address to send the test to');
+  if (!mailConfigured()) return res.status(503).json({ error: 'Email is not connected on this server yet. Add RESEND_API_KEY and MAIL_FROM to backend/.env and restart.', configured: false });
+  const clinic = req.db.settings.practice?.name || 'your clinic';
+  await sendEmail({
+    to, subject: `Clinovara test email for ${clinic}`,
+    text: `This is a test email from Clinovara for ${clinic}.\n\nIf you are reading it, email delivery is working. Sent by ${req.user}.`,
+    html: `<div style="font-family:Arial,sans-serif;max-width:460px"><h2 style="margin:0 0 8px">Email is working</h2><p>This is a test email from Clinovara for <b>${clinic}</b>.</p><p style="color:#666;font-size:13px">Sent by ${req.user}.</p></div>`,
+  });
+  log(req.db, 'integration', `${req.user} sent a test email to ${to}`);
+  req.store.save();
+  res.json({ ok: true, to, from: process.env.MAIL_FROM || 'Clinovara <onboarding@resend.dev>' });
 });
 
 r.get('/', (req, res) => {

@@ -189,7 +189,7 @@ export function Heatmap({ heat }) {
   return (
     <div className="heat">
       <div className="heat-row heat-head"><span />{heat.hours.map((h) => <span key={h}>{hr(h)}</span>)}</div>
-      {order.map((d) => <div className="heat-row" key={d}><span className="heat-day">{heat.days[d]}</span>{heat.rows[d].map((v, i) => <span key={i} className="heat-cell" style={{ background: v ? `rgba(31, 78, 121, ${0.12 + 0.88 * (v / max)})` : 'var(--surface-2)', color: v / max > 0.55 ? '#fff' : 'var(--text)' }} title={`${heat.days[d]} ${hr(heat.hours[i])}: ${v} appointment${v === 1 ? '' : 's'}`}>{v || ''}</span>)}</div>)}
+      {order.map((d) => <div className="heat-row" key={d}><span className="heat-day">{heat.days[d]}</span>{heat.rows[d].map((v, i) => <span key={i} className="heat-cell" style={{ background: v ? `rgba(37, 99, 235, ${0.12 + 0.88 * (v / max)})` : 'var(--surface-2)', color: v / max > 0.55 ? '#fff' : 'var(--text)' }} title={`${heat.days[d]} ${hr(heat.hours[i])}: ${v} appointment${v === 1 ? '' : 's'}`}>{v || ''}</span>)}</div>)}
     </div>
   );
 }

@@ -34,6 +34,7 @@ export function renderTemplate(db, templateIdOrBody, ctx = {}) {
     amount: ctx.amount || '',
     opens: ctx.opens || '',
     calendarLink: ctx.calendarLink || '',
+    note: ctx.note || '',
   };
   return body.replace(/\{\{(\w+)\}\}/g, (_, k) => (vars[k] ?? '')).replace(/(branch)\s+/gi, '$1'); // a location already named "Main branch" must not read "Main branch branch"
 }

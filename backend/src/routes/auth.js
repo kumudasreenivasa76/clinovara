@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { id, nowIso, addDays, addMinutes, bad, HttpError, log } from '../lib.js';
-import { hashPassword, verifyPassword, createSession, issueCode, consumeCode, normEmail, normPhone, publicUser, ROLES, ROLE_LABEL, MANAGERS } from '../domain/auth.js';
+import { strongPassword, verifyPassword, createSession, issueCode, consumeCode, normEmail, normPhone, publicUser, ROLES, ROLE_LABEL, MANAGERS } from '../domain/auth.js';
 import { DEMO } from '../registry.js';
 import { sendEmail, codeEmail, mailConfigured, smsConfigured, canShowDevCodes, isProd } from '../domain/mailer.js';
 import { rateLimit } from '../lib-ratelimit.js';
@@ -81,7 +81,7 @@ r.post('/register', (req, res) => {
   if (b.password !== b.confirmPassword) bad('Passwords do not match');
   if (!b.acceptTerms) bad('Accept the Terms of Service and Privacy Policy to continue');
   if (platform.db.users.some((u) => u.email === email)) throw new HttpError(409, 'An account with this email already exists. Log in instead.');
-  const hp = hashPassword(b.password);
+  const hp = strongPassword(b.password);
   const okFor = (to) => platform.db.otps.some((o) => o.to === to && o.purpose === 'signup-ok' && o.expiresAt > nowIso());
   if (!okFor(email)) bad('Verify your email address first');
   const phoneChecked = phoneVerificationOn();
@@ -139,7 +139,7 @@ r.post('/verify', (req, res) => {
   consumeCode(platform, { to, purpose, code: b.code });
   const user = platform.db.users.find((u) => (b.phone ? u.phone === to : u.email === to));
   if (!user) throw new HttpError(404, 'Account not found');
-  if (purpose === 'reset') { Object.assign(user, hashPassword(b.newPassword)); platform.save(); }
+  if (purpose === 'reset') { Object.assign(user, strongPassword(b.newPassword)); platform.save(); }
   const ms = membershipsOf(platform, user.id);
   if (!ms.length) throw new HttpError(403, 'This account is not a member of any clinic yet');
   user.lastLoginAt = nowIso(); platform.save();
@@ -161,7 +161,7 @@ r.patch('/me', (req, res) => {
   const platform = req.registry.platform; const user = platform.db.users.find((u) => u.id === req.session.userId); const b = req.body || {};
   if (b.name) user.name = b.name.trim();
   if (b.phone !== undefined) user.phone = normPhone(b.phone);
-  if (b.newPassword) { if (!verifyPassword(user, b.currentPassword)) throw new HttpError(400, 'Current password is incorrect'); Object.assign(user, hashPassword(b.newPassword)); }
+  if (b.newPassword) { if (!verifyPassword(user, b.currentPassword)) throw new HttpError(400, 'Current password is incorrect'); Object.assign(user, strongPassword(b.newPassword)); }
   platform.save();
   res.json(me(req, req.session));
 });
@@ -181,10 +181,16 @@ r.post('/invite/:token/accept', (req, res) => {
   if (!inv || inv.status !== 'pending' || inv.expiresAt < nowIso()) throw new HttpError(404, 'This invitation is no longer valid');
   let user = platform.db.users.find((u) => u.email === inv.email);
   if (user) { if (!verifyPassword(user, b.password)) throw new HttpError(401, 'Enter the password of your existing account to accept'); }
-  else { user = { id: id('usr'), name: (b.name || inv.name || '').trim() || inv.email, email: inv.email, phone: normPhone(b.phone), ...hashPassword(b.password), createdAt: nowIso() }; platform.db.users.push(user); }
+  else { user = { id: id('usr'), name: (b.name || inv.name || '').trim() || inv.email, email: inv.email, phone: normPhone(b.phone), ...strongPassword(b.password), createdAt: nowIso() }; platform.db.users.push(user); }
   if (!platform.db.memberships.some((m) => m.userId === user.id && m.tenantId === inv.tenantId)) platform.db.memberships.push({ id: id('mem'), userId: user.id, tenantId: inv.tenantId, role: inv.role, status: 'active', createdAt: nowIso(), invitedBy: inv.invitedBy, providerId: inv.providerId || null });
   inv.status = 'accepted'; inv.acceptedAt = nowIso(); user.lastTenantId = inv.tenantId; platform.save();
   res.json(me(req, createSession(platform, { userId: user.id, tenantId: inv.tenantId })));
+});
+
+/** What each role may do, for the Roles and permissions screen. */
+r.get('/permissions', async (req, res) => {
+  const { permissionMatrix } = await import('../app.js');
+  res.json({ roles: [['owner', 'Owner'], ['admin', 'Admin'], ['front_desk', 'Front desk'], ['dentist', 'Dentist'], ['hygienist', 'Hygienist']].map(([id, label]) => ({ id, label })), matrix: permissionMatrix() });
 });
 
 export default r;

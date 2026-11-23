@@ -1,4 +1,5 @@
 import Logo from '../components/Logo.jsx';
+import { brandVars, BrandLogo } from '../lib/brand.jsx';
 import React, { useEffect, useRef, useState } from 'react';
 import { IconDental, IconPhone, IconMessage, IconWorld, IconSend, IconRobot, IconUser, IconBrandWhatsapp } from '@tabler/icons-react';
 import { get, post } from '../lib/api.js';
@@ -20,7 +21,8 @@ export default function PatientPortal() {
   const [practice, setPractice] = useState('the practice');
   const [tok, setTok] = useState('');
   const bottom = useRef(null);
-  useEffect(() => { get('/api/patients?demo=1').then(setPatients).catch(() => setPatients([])); get('/api/settings').then((s) => setPractice(s.practice.name)).catch(() => {}); }, []);
+  const [branding, setBranding] = useState(null);
+  useEffect(() => { get('/api/patients?demo=1').then(setPatients).catch(() => setPatients([])); get('/api/settings').then((s) => { setPractice(s.practice.name); setBranding(s.branding || null); }).catch(() => {}); }, []);
   useEffect(() => { bottom.current?.scrollIntoView({ block: 'end' }); }, [conv?.messages?.length]);
   // Poll for staff replies
   useEffect(() => { if (!conv) return; const t = setInterval(() => get(`/api/conversations/${conv.id}`, { 'x-chat-token': tok }).then(setConv).catch(() => {}), 4000); return () => clearInterval(t); }, [conv?.id, tok]);
@@ -41,10 +43,10 @@ export default function PatientPortal() {
   const Icon = CH[channel].icon;
 
   return (
-    <div className="portal">
+    <div className="portal" style={brandVars(branding)}>
       <div className="col" style={{ width: 'min(900px, 100%)' }}>
         <div className="row wrap between" style={{ gap: 16 }}>
-          <div className="row"><div className="brand-mark"><Logo /></div><div><div className="strong">Patient experience demo</div><div className="tiny muted">Talk to the AI front desk the way a patient would. Staff see it live in the inbox.</div></div></div>
+          <div className="row"><BrandLogo branding={branding} name={practice} size={38} /><div><div className="strong">{practice ? `${practice} · patient chat demo` : 'Patient chat demo'}</div><div className="tiny muted">Talk to the AI front desk the way a patient would. Staff see it live in the inbox.</div></div></div>
           <a className="btn sm ghost" href="#/inbox" target="_blank" rel="noreferrer">Open staff inbox</a>
         </div>
         <div className="grid" style={{ gridTemplateColumns: '1fr 440px' }}>

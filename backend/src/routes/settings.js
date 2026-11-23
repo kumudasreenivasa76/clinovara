@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { bad, log, nowIso, csvCell, parseCsv } from '../lib.js';
+import { brandOf, cleanBranding, bad, log, nowIso, csvCell, parseCsv } from '../lib.js';
 import { defaultSettings } from '../seed.js';
 import { sanitizeProcedures, procedures as procedureCatalogue } from '../domain/catalogue.js';
 
@@ -17,6 +17,7 @@ function visitorView(s) {
     practice: { name: pr.name, tagline: pr.tagline, phone: pr.phone, whatsapp: pr.whatsapp, email: pr.email, address: pr.address, website: pr.website, city: pr.city, state: pr.state, hours: pr.hours, logo: pr.logo },
     locale: { currencySymbol: l.currencySymbol, numberLocale: l.numberLocale, phoneCountryCode: l.phoneCountryCode, languages: l.languages, defaultLanguage: l.defaultLanguage, timezone: l.timezone },
     locations: (s.locations || []).map((x) => ({ id: x.id, name: x.name, address: x.address, phone: x.phone, hours: x.hours })),
+    branding: brandOf(s),
   };
 }
 r.get('/', (req, res) => { if (req.role === 'public') return res.json({ ...visitorView(req.db.settings), tenant: { slug: req.tenant.slug, name: req.tenant.name } }); res.json({ ...publicSettings(req.db.settings), tenant: { slug: req.tenant.slug, name: req.tenant.name, plan: req.tenant.plan } }); });
@@ -25,6 +26,7 @@ r.put('/', (req, res) => {
   const body = req.body || {};
   const s = req.db.settings;
   const prevNext = Number(s.billing?.nextNumber) || 1;
+  if (body.branding !== undefined) s.branding = cleanBranding(body.branding);
   for (const key of ['practice', 'locale', 'locations', 'providers', 'visitTypes', 'faqs', 'escalationKeywords', 'rules', 'templates', 'consentText', 'paymentModes', 'insuranceOptions', 'holidays', 'marketing', 'afterHours', 'aftercare', 'procedures', 'fees', 'assistant', 'billing', 'goals']) {
     if (body[key] !== undefined) s[key] = ['practice', 'rules', 'locale'].includes(key) ? { ...s[key], ...body[key] } : body[key];
   }

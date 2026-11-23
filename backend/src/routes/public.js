@@ -4,7 +4,7 @@
  * scheduling engine the front desk uses, so online and desk bookings can never double-book.
  */
 import { Router } from 'express';
-import { id, nowIso, digits, bad, log, fullName, dayKey, addDays } from '../lib.js';
+import { brandOf, id, nowIso, digits, bad, log, fullName, dayKey, addDays } from '../lib.js';
 import { slotsForDay, bookAppointment, bookingRules, feeFor, visitType, provider, location, fmtWhen } from '../domain/scheduling.js';
 import { sendCommunication } from '../domain/messaging.js';
 import { procedures, feePolicy } from '../domain/catalogue.js';
@@ -19,6 +19,7 @@ r.get('/clinic', (req, res) => {
   const showFees = rules.showFees !== false;
   const types = s.visitTypes.filter((v) => v.onlineBookable !== false).map((v) => ({ id: v.id, name: v.name, durationMin: v.durationMin, providerRole: v.providerRole, fee: showFees ? feeFor(db, v, null) : null }));
   res.json({
+    branding: brandOf(db.settings),
     practice: { name: s.practice.name, tagline: s.practice.tagline, phone: s.practice.phone, whatsapp: s.practice.whatsapp, email: s.practice.email, address: s.practice.address, hours: s.practice.hours },
     currency: s.locale?.currencySymbol || '₹', timezone: s.locale?.timezone || 'Asia/Kolkata',
     onlineBooking: rules.onlineBooking, showFees, cancelNoticeHours: s.rules?.cancelNoticeHours,

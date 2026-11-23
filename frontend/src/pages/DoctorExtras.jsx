@@ -3,6 +3,7 @@ import { IconDownload, IconPrinter, IconSend, IconFileText, IconCheck, IconPlus 
 import { get, post, downloadFile } from '../lib/api.js';
 import { fmtWhen, fmtDate, fmtMoney, fmtPhone } from '../lib/format.js';
 import { RxBuilder } from './DoctorTools2.jsx';
+import { SubmissionModal, IntakePill } from './Intake.jsx';
 import { Card, Body, Pill, Empty, usePoll, useAction, Seg, Modal, Field, useToast } from '../components/ui.jsx';
 
 const q = (providerId) => (providerId ? `&providerId=${providerId}` : '');
@@ -125,6 +126,7 @@ export function FormsAndDocs({ providerId }) {
   const docs = usePoll(() => get(`/api/doctor/documents?x=1${q(providerId)}`), [providerId], 0);
   const patients = usePoll(() => get(`/api/doctor/patients?x=1${q(providerId)}`), [providerId], 0);
   const [peek, setPeek] = useState(null);
+  const [intakeId, setIntakeId] = useState(null);
   const [draft, setDraft] = useState(null);
   const [run, busy] = useAction();
   const toast = useToast();
@@ -139,20 +141,22 @@ export function FormsAndDocs({ providerId }) {
       {view === 'forms' && (
         <Card>
           {!forms.data ? <Body><div className="skeleton" /></Body> : forms.data.forms.length === 0 ? <Body><Empty>No recent or upcoming visits.</Empty></Body> : (
-            <table className="table"><thead><tr><th>Visit</th><th>Patient</th><th>Pre-visit form</th><th /></tr></thead>
+            <table className="table"><thead><tr><th>Visit</th><th>Patient</th><th>Intake form</th><th>My review</th><th /></tr></thead>
               <tbody>{forms.data.forms.map((f) => {
                 const done = f.sections.filter((s) => s.complete).length;
                 return (
                   <tr key={f.appointmentId}>
                     <td className="mono small">{fmtWhen(f.start)}</td><td className="small strong">{f.patient}</td>
-                    <td><Pill tone={f.status === 'complete' ? 'success' : f.status === 'none' ? 'muted' : 'warn'}>{FORM_WORD[f.status]}</Pill> <span className="tiny muted">{done}/{f.sections.length} sections</span></td>
-                    <td className="row gap-6"><button className="btn sm" onClick={() => setPeek(f)}>View answers</button><button className="btn sm ghost" onClick={() => { setView('docs'); setPatientId(f.patientId); }}>Write document</button></td>
+                    <td>{f.intake ? <IntakePill intake={f.intake} /> : <Pill tone="outline">{FORM_WORD[f.status]}</Pill>} <span className="tiny muted">{done}/{f.sections.length} sections</span></td>
+                    <td className="small">{!f.intake?.submittedAt ? <span className="muted">Nothing to review yet</span> : f.intake.review.dentist ? <Pill tone="good">Reviewed</Pill> : <Pill tone="warn">Pending</Pill>}</td>
+                    <td className="row gap-6">{f.packetId ? <button className="btn sm" onClick={() => setIntakeId(f.packetId)}>Open intake submission</button> : <button className="btn sm" onClick={() => setPeek(f)}>View answers</button>}<button className="btn sm ghost" onClick={() => { setView('docs'); setPatientId(f.patientId); }}>Write document</button></td>
                   </tr>
                 );
               })}</tbody></table>
           )}
         </Card>
       )}
+      {intakeId && <SubmissionModal id={intakeId} dentist onClose={() => setIntakeId(null)} onChange={forms.reload} />}
       {view === 'docs' && (
         <>
           <Card title="Write a document"><Body className="row wrap gap-6" style={{ alignItems: 'flex-end' }}>

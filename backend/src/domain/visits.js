@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { id, nowIso, dayKey, log, fullName, find, bad } from '../lib.js';
 import { renderTemplate, sendCommunication } from './messaging.js';
 import { ACTIVE, location } from './scheduling.js';
@@ -17,7 +18,8 @@ export const FORM_SECTIONS = [
 export function emptyPacket(patientId, appointmentId) {
   const sections = {};
   for (const s of FORM_SECTIONS) sections[s.key] = { complete: false, updatedAt: null, data: {} };
-  return { id: id('pkt'), patientId, appointmentId, token: id('tok').slice(4), sentAt: null, status: 'created', updatedAt: nowIso(), remindersSent: 0, sections };
+  // The link token is the only thing protecting a patient's answers, so it is long and random, never derived from time.
+  return { id: id('pkt'), patientId, appointmentId, token: crypto.randomBytes(24).toString('base64url'), assignedAt: nowIso(), sentAt: null, status: 'created', updatedAt: nowIso(), remindersSent: 0, sections };
 }
 
 export function packetStatus(pk) {

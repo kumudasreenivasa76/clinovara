@@ -8,7 +8,7 @@ const q = (providerId) => (providerId ? `&providerId=${providerId}` : '');
 const pq = (providerId) => (providerId ? `?providerId=${providerId}` : '');
 
 /* ---------------- Safe prescribing ---------------- */
-const LEVEL_STYLE = { high: { bg: '#f6d9d4', fg: '#9a2f22', label: 'Stop and check' }, medium: { bg: '#fbf0dc', fg: '#8a5a10', label: 'Be careful' }, low: { bg: '#edf2f8', fg: '#1f4e79', label: 'Note' } };
+const LEVEL_STYLE = { high: { bg: '#f6d9d4', fg: '#9a2f22', label: 'Stop and check' }, medium: { bg: '#fbf0dc', fg: '#8a5a10', label: 'Be careful' }, low: { bg: '#eff6ff', fg: '#1d4ed8', label: 'Note' } };
 
 export function RxBuilder({ patientId, providerId, onClose, onDone }) {
   const [drugs, setDrugs] = useState([]);

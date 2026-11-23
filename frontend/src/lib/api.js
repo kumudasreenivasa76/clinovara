@@ -3,8 +3,17 @@ const TENANT = 'clinovara.tenant';
 
 // Browser storage can be blocked (sandboxed frames, private modes). The values are also kept in memory so a login still works for the whole visit.
 let memToken = ''; let memTenant = ''; let memUser = '';
-export function getToken() { if (memToken) return memToken; try { return localStorage.getItem(TOKEN) || ''; } catch { return ''; } }
-export function setToken(t) { memToken = t || ''; try { if (t) localStorage.setItem(TOKEN, t); else localStorage.removeItem(TOKEN); } catch { /* storage blocked: memory only */ } }
+export function getToken() { if (memToken) return memToken; try { return localStorage.getItem(TOKEN) || sessionStorage.getItem(TOKEN) || ''; } catch { return ''; } }
+let remember = true;
+/** Keep me signed in: true keeps the session across browser restarts, false ends it when the tab closes. */
+export function setRemember(v) { remember = v !== false; }
+export function setToken(t) {
+  memToken = t || '';
+  try {
+    localStorage.removeItem(TOKEN); sessionStorage.removeItem(TOKEN);
+    if (t) (remember ? localStorage : sessionStorage).setItem(TOKEN, t);
+  } catch { /* storage blocked: memory only */ }
+}
 /** Clinic slug used by patient-facing pages (kiosk, display, forms, chat) that have no staff session. */
 export function getTenant() { if (memTenant) return memTenant; try { return sessionStorage.getItem(TENANT) || ''; } catch { return ''; } }
 export function setTenant(slug) { memTenant = slug || ''; try { if (slug) sessionStorage.setItem(TENANT, slug); else sessionStorage.removeItem(TENANT); } catch { /* storage blocked: memory only */ } }

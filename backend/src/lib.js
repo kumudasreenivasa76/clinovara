@@ -1,7 +1,7 @@
 export const COLLECTIONS = [
   'settings', 'patients', 'appointments', 'waitlist', 'conversations', 'formPackets',
   'visits', 'treatmentPlans', 'communications', 'kioskSessions', 'activity', 'blocks', 'webhookLog', 'callbacks',
-  'calls', 'ehrOutbox', 'documents', 'labCases', 'images', 'tasks',
+  'calls', 'ehrOutbox', 'documents', 'labCases', 'images', 'tasks', 'deskTasks',
 ];
 
 let counter = 0;
@@ -85,3 +85,14 @@ export function useTimezone(tz) {
   if (process.env.TZ !== zone) process.env.TZ = zone;
   return zone;
 }
+
+/** Clinic branding shown on patient-facing screens. Colour is a 6-digit hex; the logo is a small image data URL. */
+export const DEFAULT_BRAND = { color: '#2563eb', logo: '', welcome: '' };
+export function cleanBranding(b = {}) {
+  const color = /^#[0-9a-fA-F]{6}$/.test(String(b.color || '')) ? String(b.color).toLowerCase() : DEFAULT_BRAND.color;
+  const logo = String(b.logo || '');
+  if (logo && !/^data:image\/(png|jpeg|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/.test(logo)) throw new HttpError(400, 'The logo must be a PNG, JPG, WebP or SVG image');
+  if (logo.length > 400000) throw new HttpError(400, 'The logo is too large. Use an image under 300 KB.');
+  return { color, logo, welcome: String(b.welcome || '').slice(0, 120) };
+}
+export const brandOf = (settings) => ({ ...DEFAULT_BRAND, ...(settings?.branding || {}) });

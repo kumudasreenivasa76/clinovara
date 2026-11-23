@@ -5,7 +5,7 @@
  * on expiry. A kiosk is pinned to a branch via its kiosk code (Settings → Branches).
  */
 import { Router } from 'express';
-import { id, nowIso, dayKey, digits, bad, find, log, fullName, HttpError } from '../lib.js';
+import { id, nowIso, dayKey, digits, bad, find, log, fullName, HttpError, brandOf } from '../lib.js';
 import { ACTIVE, location } from '../domain/scheduling.js';
 import { FORM_SECTIONS, packetFor, updateSection, arrive, syncVisitMissing, packetStatus } from '../domain/visits.js';
 
@@ -20,9 +20,14 @@ function session(req) {
   touch(req.db, s);
   return s;
 }
+/** People already waiting for the same dentist who arrived before this visit. */
+function aheadOf(db, visit, a) {
+  const waiting = ['arrived', 'checking_in', 'needs_attention', 'ready', 'called'];
+  return db.visits.filter((v) => v.id !== visit.id && waiting.includes(v.status) && (v.arrivedAt || '') < (visit.arrivedAt || '~')).filter((v) => { const x = db.appointments.find((y) => y.id === v.appointmentId); return x && x.providerId === a.providerId && dayKey(x.start) === dayKey(a.start); }).length;
+}
 function view(db, s) {
   const loc = location(db, s.locationId);
-  const base = { id: s.id, step: s.step, expiresAt: s.expiresAt, secondsLeft: Math.max(0, Math.round((new Date(s.expiresAt) - Date.now()) / 1000)), practice: { name: db.settings.practice.name }, location: loc ? { id: loc.id, name: loc.name } : null, languages: db.settings.locale?.languages || [{ code: 'en', name: 'English' }], helpRequested: !!s.helpRequested, insuranceOptions: db.settings.insuranceOptions || [] };
+  const base = { id: s.id, step: s.step, expiresAt: s.expiresAt, secondsLeft: Math.max(0, Math.round((new Date(s.expiresAt) - Date.now()) / 1000)), practice: { name: db.settings.practice.name }, branding: brandOf(db.settings), location: loc ? { id: loc.id, name: loc.name } : null, languages: db.settings.locale?.languages || [{ code: 'en', name: 'English' }], helpRequested: !!s.helpRequested, insuranceOptions: db.settings.insuranceOptions || [] };
   if (s.candidates?.length && !s.patientId) return { ...base, choose: s.candidates };
   if (!s.patientId) return base;
   const patient = db.patients.find((p) => p.id === s.patientId);
@@ -35,7 +40,7 @@ function view(db, s) {
     appointment: { start: a.start, visitType: db.settings.visitTypes.find((v) => v.id === a.visitTypeId)?.name, provider: db.settings.providers.find((p) => p.id === a.providerId)?.name, location: location(db, a.locationId)?.name, fee: a.fee, paymentStatus: a.paymentStatus, currency: db.settings.locale?.currencySymbol || '₹' },
     forms: { status: packetStatus(pk), sections: FORM_SECTIONS.map((sec) => ({ key: sec.key, label: sec.label, complete: !!pk.sections[sec.key]?.complete, data: pk.sections[sec.key]?.data || {}, prefilled: !!pk.sections[sec.key]?.prefilled })) },
     consentText: db.settings.consentText,
-    visit: visit ? { status: visit.status, token: visit.token, missing: visit.missing, insuranceScannedAt: visit.insuranceScannedAt, consentSignedAt: visit.consentSignedAt } : null,
+    visit: visit ? { ahead: aheadOf(db, visit, a), status: visit.status, token: visit.token, missing: visit.missing, insuranceScannedAt: visit.insuranceScannedAt, consentSignedAt: visit.consentSignedAt } : null,
   };
 }
 

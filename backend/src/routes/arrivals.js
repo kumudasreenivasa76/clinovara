@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { nowIso, dayKey, find, log, fullName } from '../lib.js';
+import { nowIso, dayKey, find, log, fullName, brandOf } from '../lib.js';
 import { arrivalsBoard, arrive, setVisitStatus, syncVisitMissing, recordPayment, queueBoard } from '../domain/visits.js';
 import { assignReceiptNo, buildReceipt, sendReceipt } from '../domain/billing.js';
 import { location } from '../domain/scheduling.js';
@@ -82,7 +82,7 @@ r.post('/:appointmentId/no-show', (req, res) => {
 r.get('/board', (req, res) => {
   const db = req.db;
   const locationId = req.query.locationId ? String(req.query.locationId) : (db.settings.locations?.[0]?.id || null);
-  res.json({ practice: db.settings.practice.name, location: location(db, locationId), at: nowIso(), lanes: queueBoard(db, locationId) });
+  res.json({ practice: db.settings.practice.name, branding: brandOf(db.settings), location: location(db, locationId), at: nowIso(), lanes: queueBoard(db, locationId) });
 });
 
 export default r;

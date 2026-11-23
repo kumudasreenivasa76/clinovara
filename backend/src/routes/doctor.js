@@ -2,6 +2,7 @@
 import { Router } from 'express';
 import { id, nowIso, addDays, dayKey, minutesBetween, fullName, find, bad, log } from '../lib.js';
 import { arrivalsBoard, setVisitStatus, FORM_SECTIONS, packetStatus } from '../domain/visits.js';
+import { lifecycle } from '../domain/intake.js';
 import { bookAppointment, nextSlots, location } from '../domain/scheduling.js';
 import { renderTemplate, sendCommunication, templateBody } from '../domain/messaging.js';
 import { estimateAppointment } from '../domain/estimates.js';
@@ -29,7 +30,9 @@ export function defaultAftercare() {
 const aftercareList = (db) => (db.settings.aftercare ||= defaultAftercare());
 
 function providerFor(req) {
-  const providerId = req.query.providerId || req.body?.providerId || req.membership?.providerId || null;
+  // A linked dentist always gets their own figures; only owners and admins may ask for another dentist's.
+  const asked = req.query.providerId || req.body?.providerId || null; const own = req.membership?.providerId || null;
+  const providerId = ['owner', 'admin'].includes(req.role) ? (asked || own) : (own || asked);
   return providerId ? find(req.db.settings.providers, providerId, 'Provider') : null;
 }
 
@@ -253,7 +256,7 @@ r.get('/forms', (req, res) => {
   const from = addDays(nowIso(), -14);
   const rows = db.appointments.filter((a) => a.providerId === prov.id && a.start >= from && a.status !== 'cancelled').sort((a, b) => a.start.localeCompare(b.start)).map((a) => {
     const pk = db.formPackets.find((k) => k.appointmentId === a.id); const patient = db.patients.find((p) => p.id === a.patientId);
-    return { appointmentId: a.id, patientId: a.patientId, patient: fullName(patient), start: a.start, status: pk ? packetStatus(pk) : 'none', token: pk?.token || null,
+    return { appointmentId: a.id, patientId: a.patientId, patient: fullName(patient), start: a.start, status: pk ? packetStatus(pk) : 'none', token: pk?.token || null, packetId: pk?.id || null, intake: pk ? lifecycle(db, pk, a) : null,
       sections: FORM_SECTIONS.map((sec) => ({ key: sec.key, label: sec.label, complete: !!pk?.sections[sec.key]?.complete, data: pk?.sections[sec.key]?.data || {} })) };
   });
   res.json({ forms: rows });

@@ -212,7 +212,7 @@ function ReceiptModal({ appointmentId, onClose }) {
       {err && <div className="callout small">{err}</div>}
       {r && (
         <div className="receipt" id="receipt-print">
-          <div className="receipt-head"><b>{r.clinic.name}</b><div className="tiny">{[r.clinic.branch, r.clinic.address].filter(Boolean).join(' · ')}</div><div className="tiny">{[r.clinic.phone, r.clinic.email].filter(Boolean).join(' · ')}</div>{(r.clinic.gstin || r.clinic.clinicalEstablishmentNo) && <div className="tiny">{[r.clinic.gstin && `GSTIN ${r.clinic.gstin}`, r.clinic.clinicalEstablishmentNo && `Clinical Est. ${r.clinic.clinicalEstablishmentNo}`].filter(Boolean).join(' · ')}</div>}</div>
+          <div className="receipt-head">{r.branding?.logo && <img src={r.branding.logo} alt="" className="receipt-logo" />}<b>{r.clinic.name}</b><div className="tiny">{[r.clinic.branch, r.clinic.address].filter(Boolean).join(' · ')}</div><div className="tiny">{[r.clinic.phone, r.clinic.email].filter(Boolean).join(' · ')}</div>{(r.clinic.gstin || r.clinic.clinicalEstablishmentNo) && <div className="tiny">{[r.clinic.gstin && `GSTIN ${r.clinic.gstin}`, r.clinic.clinicalEstablishmentNo && `Clinical Est. ${r.clinic.clinicalEstablishmentNo}`].filter(Boolean).join(' · ')}</div>}</div>
           <div className="receipt-meta"><span>Receipt <b>{r.receiptNo}</b></span><span>{r.date}</span></div>
           <div className="small">Received from <b>{r.patient.name}</b>{r.patient.phone ? ` · ${r.patient.phone}` : ''}{r.provider ? ` · treated by ${r.provider.name}${r.provider.registrationNo ? ` (${r.provider.registrationNo})` : ''}` : ''}</div>
           <table className="table"><thead><tr><th>Description</th><th style={{ textAlign: 'right' }}>Amount</th></tr></thead><tbody>

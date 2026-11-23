@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { DentistHome, DentistQueue, DentistIntake, DentistTasks } from './DentistWorkspace.jsx';
 import { IconPlayerPlay, IconArmchair, IconCheck, IconMessageQuestion, IconAlertTriangle, IconClockPause, IconRepeat, IconDental, IconCalendarEvent, IconUsers, IconChartBar, IconHelpCircle, IconSearch, IconPlus, IconTrash, IconSend, IconArrowRight, IconArrowLeft, IconStethoscope, IconPhone, IconFileExport, IconFolderCheck } from '@tabler/icons-react';
 import { get, post, patch, downloadFile } from '../lib/api.js';
 import { fmtTime, fmtDate, fmtWhen, fullName, fmtMoney, minutesSince, ago, fmtPhone } from '../lib/format.js';
@@ -10,7 +11,11 @@ import { PageHeader, MetricTile, longDate } from '../components/dash.jsx';
 import { Card, Body, Pill, Avatar, Empty, usePoll, useAction, Stat, Seg, Modal, Field, useToast } from '../components/ui.jsx';
 
 export const DOCTOR_TABS = [
-  { id: 'today', label: 'Today', icon: IconStethoscope },
+  { id: 'home', label: 'My dashboard', icon: IconChartBar },
+  { id: 'queue', label: 'Arrivals and queue', icon: IconUsers },
+  { id: 'intake', label: 'Pre visit forms', icon: IconDental },
+  { id: 'tasks', label: 'Reception tasks', icon: IconRepeat },
+  { id: 'today', label: 'Today, clinical', icon: IconStethoscope },
   { id: 'patients', label: 'My patients', icon: IconUsers },
   { id: 'appts', label: 'Appointments', icon: IconCalendarEvent },
   { id: 'week', label: 'My week', icon: IconCalendarEvent },
@@ -28,7 +33,7 @@ const STAGE_WORDS = { expected: 'Not arrived yet', arrived: 'Arrived, checking i
 /** The dentist's home: one place for today, patients, week, plans, numbers, written in plain words. */
 export default function DoctorDashboard({ me }) {
   const [providerId, setProviderId] = useState(me.providerId || (() => { try { return localStorage.getItem('clinovara.provider') || ''; } catch { return ''; } })());
-  const [tab, setTab] = useState(() => { const q = new URLSearchParams((window.location.hash.split('?')[1] || '')).get('tab'); return TABS.some((x) => x.id === q) ? q : 'today'; });
+  const [tab, setTab] = useState(() => { const q = new URLSearchParams((window.location.hash.split('?')[1] || '')).get('tab'); return TABS.some((x) => x.id === q) ? q : 'home'; });
   const [days, setDays] = useState(30);
   const { data, reload } = usePoll(() => get(`/api/doctor/dashboard?days=${days}${providerId ? `&providerId=${providerId}` : ''}`), [providerId, days], 6000);
   const [run] = useAction();
@@ -38,7 +43,7 @@ export default function DoctorDashboard({ me }) {
   const [finishing, setFinishing] = useState(null);
   const [cmd, setCmd] = useState(false);
   // The sections live in the sidebar and change the hash; follow it.
-  useEffect(() => { const on = () => { const q = new URLSearchParams(window.location.hash.split('?')[1] || '').get('tab'); setTab(TABS.some((x) => x.id === q) ? q : 'today'); }; window.addEventListener('hashchange', on); return () => window.removeEventListener('hashchange', on); }, []);
+  useEffect(() => { const on = () => { const q = new URLSearchParams(window.location.hash.split('?')[1] || '').get('tab'); setTab(TABS.some((x) => x.id === q) ? q : 'home'); }; window.addEventListener('hashchange', on); return () => window.removeEventListener('hashchange', on); }, []);
   useEffect(() => { const k = (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setCmd(true); } }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k); }, []);
   useEffect(() => { const v = qs.get('finish'); if (v && data?.today) { const row = data.today.board.find((r) => r.visit?.id === v); if (row && !finishing) setFinishing(row); } }, [data?.today?.board?.length]); // eslint-disable-line
   const feeds = usePoll(() => get('/api/calendar/feeds'), [], 0);
@@ -60,10 +65,15 @@ export default function DoctorDashboard({ me }) {
 
   return (
     <>
-      <PageHeader title={p.name.replace(/^Dr\.\s*/, 'Dr. ')} sub={`${p.specialty || p.role}${p.qualifications ? `, ${p.qualifications}` : ''} · ${longDate()}`}
-        actions={<><button className="btn" onClick={() => setCmd(true)}><IconSearch size={14} />Search<span className="tiny muted" style={{ marginLeft: 8 }}>Ctrl K</span></button>{!me.providerId && <select className="input" style={{ width: 200 }} value={providerId} onChange={(e) => { setProviderId(e.target.value); try { localStorage.setItem('clinovara.provider', e.target.value); } catch { /* ignore */ } }}>{data.providers.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select>}</>} />
+      {!['home', 'queue', 'intake', 'tasks'].includes(tab) && <PageHeader title={p.name.replace(/^Dr\.\s*/, 'Dr. ')} sub={`${p.specialty || p.role}${p.qualifications ? `, ${p.qualifications}` : ''} · ${longDate()}`}
+        actions={<><button className="btn" onClick={() => setCmd(true)}><IconSearch size={14} />Search<span className="tiny muted" style={{ marginLeft: 8 }}>Ctrl K</span></button>{!me.providerId && <select className="input" style={{ width: 200 }} value={providerId} onChange={(e) => { setProviderId(e.target.value); try { localStorage.setItem('clinovara.provider', e.target.value); } catch { /* ignore */ } }}>{data.providers.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select>}</>} />}
       {cmd && <CommandBar providerId={p.id} tabs={TABS} onTab={(id) => { window.location.hash = `#/doctor?tab=${id}`; }} onChart={setChart} onClose={() => setCmd(false)} />}
       <div className="mt-16">
+
+      {tab === 'home' && <DentistHome providerId={me.providerId ? '' : p.id} />}
+      {tab === 'queue' && <DentistQueue providerId={me.providerId ? '' : p.id} />}
+      {tab === 'intake' && <DentistIntake providerId={me.providerId ? '' : p.id} />}
+      {tab === 'tasks' && <DentistTasks providerId={me.providerId ? '' : p.id} />}
 
       {tab === 'today' && (<>
         <div className="mgrid">

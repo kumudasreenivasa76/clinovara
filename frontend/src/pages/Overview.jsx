@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { IconCalendarPlus, IconUserPlus, IconTarget, IconCheck } from '@tabler/icons-react';
+import { IconCalendarPlus, IconUserPlus, IconTarget, IconCheck, IconLayoutDashboard, IconPhoneCall, IconHeadset, IconMessages, IconCalendarEvent, IconChevronRight } from '@tabler/icons-react';
 import { get, put } from '../lib/api.js';
 import { fmtMoney } from '../lib/format.js';
 import { Card, Body, usePoll, Seg, useAction } from '../components/ui.jsx';
@@ -7,8 +7,8 @@ import { PageHeader, ApptTable, ActionList, MetricTile, TrendChart, Heatmap, Sta
 
 const safe = (p, fallback) => p.catch(() => fallback);
 const compact = (v) => (v >= 1e7 ? `₹${(v / 1e7).toFixed(1)}Cr` : v >= 1e5 ? `₹${(v / 1e5).toFixed(1)}L` : v >= 1e3 ? `₹${Math.round(v / 1e3)}k` : `₹${Math.round(v)}`);
-const STATUS = { completed: 'Completed', scheduled: 'Scheduled', confirmed: 'Confirmed', arrived: 'Arrived', no_show: 'No-show', cancelled: 'Cancelled' };
-const STATUS_TONE = { Completed: 'var(--good)', Scheduled: '#8da4b8', Confirmed: 'var(--accent)', Arrived: '#4f7aa6', 'No-show': 'var(--bad)', Cancelled: '#c9cfcc' };
+const STATUS = { completed: 'Completed', scheduled: 'Scheduled', confirmed: 'Confirmed', arrived: 'Arrived', no_show: 'No show', cancelled: 'Cancelled' };
+const STATUS_TONE = { Completed: 'var(--good)', Scheduled: '#93c5fd', Confirmed: 'var(--accent)', Arrived: '#60a5fa', 'No show': 'var(--bad)', Cancelled: '#cbd5e1' };
 
 /** Owner and admin home: how the clinic is doing against the last period, today's appointments, what needs a decision, and where time and money go. */
 export default function Overview({ branch, locations, me }) {
@@ -19,14 +19,14 @@ export default function Overview({ branch, locations, me }) {
   const q = branch ? `&locationId=${branch}` : '';
   const { data, reload } = usePoll(async () => {
     const today = dayKey(new Date());
-    const [dash, todays, ins, convs, cbs, mk, gr, team] = await Promise.all([
+    const [dash, todays, ins, convs, cbs, mk, gr, team, calls] = await Promise.all([
       get(`/api/dashboard?days=${days}${q}`), get(`/api/appointments?from=${today}&to=${today}${q}`), get(`/api/insights?days=30${q}`),
-      safe(get('/api/conversations'), []), safe(get('/api/callbacks'), { items: [] }), safe(get('/api/marketing'), { pendingApprovals: 0 }), safe(get(`/api/marketing/growth?days=30`), null), safe(get('/api/team'), null),
+      safe(get('/api/conversations'), []), safe(get('/api/callbacks'), { items: [] }), safe(get('/api/marketing'), { pendingApprovals: 0 }), safe(get(`/api/marketing/growth?days=30`), null), safe(get('/api/team'), null), safe(get('/api/calls'), []),
     ]);
-    return { dash, todays: todays.filter((a) => a.status !== 'cancelled'), ins, convs, callbacks: cbs.items.length, approvals: mk.pendingApprovals || 0, gr, team };
+    return { dash, todays: todays.filter((a) => a.status !== 'cancelled'), ins, convs, callbacks: cbs.items.length, approvals: mk.pendingApprovals || 0, gr, team, calls: Array.isArray(calls) ? calls : [] };
   }, [branch, days], 30000);
   if (!data) return <div className="skeleton" />;
-  const { dash: d, todays, ins, convs, callbacks, approvals, gr, team } = data;
+  const { dash: d, todays, ins, convs, callbacks, approvals, gr, team, calls } = data;
   const branchName = locations.find((l) => l.id === branch)?.name;
   // A clinic with no patients and no appointments yet gets a checklist instead of a wall of zeros.
   const anyActivity = d.patients.total > 0 || d.now.appointments + d.previous.appointments > 0 || todays.length > 0;
@@ -64,6 +64,18 @@ export default function Overview({ branch, locations, me }) {
     [ins.forms.incomplete || 0, 'Upcoming patients with incomplete forms', '#/previsit', ''], [ins.recalls.overdue, 'Patients overdue for recall', '#/patients', ''],
     [ins.unscheduledTreatment.count, `Patients with unscheduled treatment${ins.unscheduledTreatment.value ? ` (${fmtMoney(ins.unscheduledTreatment.value)})` : ''}`, '#/treatment', ''],
   ].filter(([c]) => c > 0);
+  // The front desk's five screens, each with the one number that says whether it needs a look right now.
+  const todayKey = dayKey(new Date());
+  const waiting = todays.filter((a) => a.status === 'arrived').length;
+  const toCome = todays.filter((a) => a.status === 'scheduled' || a.status === 'confirmed').length;
+  const callsToday = calls.filter((c) => String(c.startedAt || c.createdAt || '').slice(0, 10) === todayKey).length;
+  const frontDesk = [
+    { to: '#/dashboard', icon: IconLayoutDashboard, label: 'Arrivals & queue', value: waiting, unit: waiting === 1 ? 'patient waiting' : 'patients waiting', note: `${todays.length} booked today`, alert: false },
+    { to: '#/callbacks', icon: IconPhoneCall, label: 'Callbacks', value: callbacks, unit: callbacks === 1 ? 'call to return' : 'calls to return', note: 'Missed calls and after hours messages', alert: callbacks > 0 },
+    { to: '#/calls', icon: IconHeadset, label: 'Calls', value: callsToday, unit: callsToday === 1 ? 'call today' : 'calls today', note: `${calls.length} answered by the assistant in all`, alert: false },
+    { to: '#/inbox', icon: IconMessages, label: 'Front desk inbox', value: needsStaff, unit: needsStaff === 1 ? 'message needs a person' : 'messages need a person', note: `${convs.length} conversations`, alert: needsStaff > 0 },
+    { to: '#/schedule', icon: IconCalendarEvent, label: 'Schedule', value: toCome, unit: toCome === 1 ? 'visit still to come' : 'visits still to come', note: `${todays.length} appointments today`, alert: false },
+  ];
   const g = d.goal; const onPace = g.target ? g.projected >= g.target : null;
   const saveTarget = () => run(async () => { await put('/api/settings', { goals: { monthlyRevenue: Number(target) || 0 } }); setTarget(''); reload(); }, 'Target saved');
   const metricCfg = { revenue: { label: 'Collected', values: col('revenue'), format: compact, unit: 'collected' }, appointments: { label: 'Appointments', values: col('appointments'), format: (v) => Math.round(v), unit: 'appointments' }, newPatients: { label: 'New patients', values: col('newPatients'), format: (v) => Math.round(v), unit: 'new patients' } }[metric];
@@ -79,11 +91,24 @@ export default function Overview({ branch, locations, me }) {
         <MetricTile label="Appointments" value={n.appointments} cur={n.appointments} prev={p.appointments} series={col('appointments')} hint={`${n.completed} completed`} />
         <MetricTile label="New patients" value={n.newPatients} cur={n.newPatients} prev={p.newPatients} series={col('newPatients')} hint={`${d.patients.total} on file`} />
         <MetricTile label="Average bill" value={fmtMoney(n.avgTicket)} cur={n.avgTicket} prev={p.avgTicket} hint="per paid visit" />
-        <MetricTile label="No-show rate" value={`${n.noShowRate}%`} cur={n.noShowRate} prev={p.noShowRate} invert series={col('noShows')} unitLabel="No-shows per day" hint={`${n.noShows} missed`} />
+        <MetricTile label="No show rate" value={`${n.noShowRate}%`} cur={n.noShowRate} prev={p.noShowRate} invert series={col('noShows')} unitLabel="No shows per day" hint={`${n.noShows} missed`} />
         <MetricTile label="Cancellations" value={n.cancellations} cur={n.cancellations} prev={p.cancellations} invert hint="in the period" />
         <MetricTile label="Chair utilisation" value={`${n.utilisation}%`} cur={n.utilisation} prev={p.utilisation} hint="booked time vs open hours" />
         <MetricTile label="Visits per open day" value={Math.round(n.appointments / Math.max(1, s.filter((x) => x.appointments > 0).length))} hint={`${d.patients.returningPercent}% returning patients`} />
       </div>
+
+      <section className="fd-row mb-16" aria-label="Front desk">
+        <div className="fd-row-hd"><h2>Front desk</h2><span className="muted small">Right now · {branchName || 'All branches'}</span></div>
+        <div className="fd-tiles">
+          {frontDesk.map((x) => (
+            <a key={x.to} href={x.to} className={`fd-tile ${x.alert ? 'alert' : ''}`}>
+              <div className="fd-tile-top"><span className="fd-ic"><x.icon size={18} stroke={1.8} /></span><span className="fd-name">{x.label}</span><IconChevronRight size={16} className="fd-go" /></div>
+              <div className="fd-num">{x.value}<span>{x.unit}</span></div>
+              <div className="fd-note">{x.note}</div>
+            </a>
+          ))}
+        </div>
+      </section>
 
       <div className="grid side mb-16">
         <Card title={metricCfg.label} actions={<Seg value={metric} onChange={setMetric} options={[{ value: 'revenue', label: 'Collected' }, { value: 'appointments', label: 'Appointments' }, { value: 'newPatients', label: 'New patients' }]} />}>
@@ -95,7 +120,7 @@ export default function Overview({ branch, locations, me }) {
               <div><div className="goal-big">{compact(g.collected)} <span className="muted">of {compact(g.target)}</span></div><div className="small muted">{Math.round((g.collected / g.target) * 100)}% · day {g.dayOfMonth} of {g.daysInMonth}</div></div>
               <GoalBar collected={g.collected} target={g.target} dayOfMonth={g.dayOfMonth} daysInMonth={g.daysInMonth} />
               <div className="small">{onPace ? <span className="delta up"><IconCheck size={13} /> On pace</span> : <span className="delta down">Behind pace</span>} <span className="muted">Projected month end {compact(g.projected)}</span></div>
-            </>) : <div className="small muted">Set a revenue target for {new Date().toLocaleDateString('en-IN', { month: 'long' })} to track pace and a month-end projection. Collected so far: <b>{compact(g.collected)}</b>.</div>}
+            </>) : <div className="small muted">Set a revenue target for {new Date().toLocaleDateString('en-IN', { month: 'long' })} to track pace and a month end projection. Collected so far: <b>{compact(g.collected)}</b>.</div>}
             <div className="row gap-6"><input className="input" type="number" min="0" placeholder={g.target ? `Target (${g.target})` : 'Monthly target in ₹'} value={target} onChange={(e) => setTarget(e.target.value)} /><button className="btn" disabled={busy || !target} onClick={saveTarget}>Save</button></div>
           </Body>
         </Card>
@@ -126,7 +151,7 @@ export default function Overview({ branch, locations, me }) {
 
       <Card title={`Team performance, last ${days} days`}>
         <table className="table">
-          <thead><tr><th>Dentist</th><th style={{ textAlign: 'right' }}>Appointments</th><th style={{ textAlign: 'right' }}>Completed</th><th style={{ textAlign: 'right' }}>No-shows</th><th style={{ textAlign: 'right' }}>Collected</th><th style={{ width: 180 }}>Chair time used</th></tr></thead>
+          <thead><tr><th>Dentist</th><th style={{ textAlign: 'right' }}>Appointments</th><th style={{ textAlign: 'right' }}>Completed</th><th style={{ textAlign: 'right' }}>No shows</th><th style={{ textAlign: 'right' }}>Collected</th><th style={{ width: 180 }}>Chair time used</th></tr></thead>
           <tbody>{d.team.map((t) => <tr key={t.id}><td><span className="strong">{t.name}</span> <span className="muted tiny">{t.role}</span></td><td className="mono" style={{ textAlign: 'right' }}>{t.appointments}</td><td className="mono" style={{ textAlign: 'right' }}>{t.completed}</td><td className="mono" style={{ textAlign: 'right' }}>{t.noShows}</td><td className="mono" style={{ textAlign: 'right' }}>{fmtMoney(t.revenue)}</td><td><div className="row gap-8"><div className="loadbar grow" style={{ margin: 0 }}><i style={{ width: `${t.utilisation}%` }} /></div><span className="mono small">{t.utilisation}%</span></div></td></tr>)}</tbody>
         </table>
       </Card>

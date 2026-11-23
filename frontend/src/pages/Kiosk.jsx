@@ -1,7 +1,7 @@
-import Logo from '../components/Logo.jsx';
 import React, { useEffect, useRef, useState } from 'react';
-import { IconDental, IconHandStop, IconCheck, IconTextSize, IconContrast, IconCreditCard, IconSignature, IconClipboardText, IconArrowLeft } from '@tabler/icons-react';
-import { post } from '../lib/api.js';
+import { IconDental, IconHandStop, IconCheck, IconTextSize, IconContrast, IconCreditCard, IconSignature, IconClipboardText, IconArrowLeft, IconBackspace, IconDoorEnter, IconUserQuestion, IconClock, IconStethoscope } from '@tabler/icons-react';
+import { get, post } from '../lib/api.js';
+import { brandVars, BrandLogo } from '../lib/brand.jsx';
 import { fmtTime, fmtMoney } from '../lib/format.js';
 import { SectionForm } from './Forms.jsx';
 import { Steps, Seg } from '../components/ui.jsx';
@@ -18,6 +18,11 @@ export default function Kiosk({ locationId, kioskCode }) {
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(null);
+  // The clinic's name, logo and colour are public, so the welcome screen can show them before anyone starts a session.
+  const [clinic, setClinic] = useState(null);
+  useEffect(() => { get('/api/settings').then(setClinic).catch(() => {}); }, []);
+  const [clockNow, setClockNow] = useState(new Date());
+  useEffect(() => { const x = setInterval(() => setClockNow(new Date()), 30000); return () => clearInterval(x); }, []);
   const sessionRef = useRef(null);
   sessionRef.current = session;
   const T = (k, vars) => t(lang, k, vars);
@@ -46,31 +51,44 @@ export default function Kiosk({ locationId, kioskCode }) {
   }
   const changeLang = (l) => { setLang(l); if (session) post(`/api/kiosk/sessions/${session.id}/language`, { lang: l }).then(setSession).catch(() => {}); };
 
-  const cls = `kiosk ${large ? 'large' : ''} ${contrast ? 'high-contrast' : ''}`;
-  if (screen === 'privacy') return <div className="privacy"><div><IconDental size={56} /><h1>{T('privacyTitle')}</h1><p>{T('privacySub')}</p></div></div>;
+  const cls = `kiosk kx ${large ? 'large' : ''} ${contrast ? 'high-contrast' : ''}`;
+  const branding = session?.branding || clinic?.branding || null;
+  const clinicName = session?.practice?.name || clinic?.practice?.name || 'Welcome';
+  const stepNo = ['identify', 'choose'].includes(screen) ? 1 : ['home', 'forms', 'insurance', 'consent'].includes(screen) ? 2 : screen === 'done' ? 3 : 0;
+  if (screen === 'privacy') return <div className="privacy" style={brandVars(branding)}><div><IconDental size={56} /><h1>{T('privacyTitle')}</h1><p>{T('privacySub')}</p></div></div>;
   const langs = session?.languages || LANGS;
 
   return (
-    <div className={cls}>
-      <div className="kiosk-card">
-        <div className="kiosk-bar">
-          <div className="row"><div className="brand-mark"><Logo /></div><div><div className="strong">{session?.practice?.name || 'Welcome'}</div><div className="tiny muted">{session?.location?.name ? `${session.location.name} · ` : ''}Self-service check-in</div></div></div>
-          <div className="row gap-6 wrap">
-            <div className="seg lang-seg">{langs.map((l) => <button key={l.code} className={lang === l.code ? 'active' : ''} onClick={() => changeLang(l.code)}>{l.name}</button>)}</div>
-            <button className={`btn sm ${large ? 'soft' : ''}`} onClick={() => setLarge(!large)} aria-pressed={large}><IconTextSize size={16} />{T('largerText')}</button>
-            <button className={`btn sm ${contrast ? 'soft' : ''}`} onClick={() => setContrast(!contrast)} aria-pressed={contrast}><IconContrast size={16} />{T('highContrast')}</button>
-            {session && screen !== 'help' && <button className="btn sm danger" onClick={() => setScreen('help')}><IconHandStop size={16} />{T('askHelp')}</button>}
-          </div>
+    <div className={cls} style={contrast ? undefined : brandVars(branding)}>
+      <header className="kx-top">
+        <div className="kx-brand"><BrandLogo branding={branding} name={clinicName} size={46} /><div><div className="kx-name">{clinicName}</div><div className="kx-sub">{session?.location?.name ? `${session.location.name} · ` : ''}Self-service check-in</div></div></div>
+        <div className="kx-tools">
+          <span className="kx-clock"><IconClock size={16} />{clockNow.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}</span>
+          <button className={`kx-tool ${large ? 'on' : ''}`} onClick={() => setLarge(!large)} aria-pressed={large}><IconTextSize size={18} />{T('largerText')}</button>
+          <button className={`kx-tool ${contrast ? 'on' : ''}`} onClick={() => setContrast(!contrast)} aria-pressed={contrast}><IconContrast size={18} />{T('highContrast')}</button>
+          {session && screen !== 'help' && screen !== 'walkin' && <button className="kx-tool help" onClick={() => setScreen('help')}><IconHandStop size={18} />{T('askHelp')}</button>}
         </div>
-        {session && <div className="row between"><span className="kiosk-timer">{T('sessionClears', { n: secondsLeft ?? '—' })}</span>{screen !== 'welcome' && screen !== 'done' && <button className="btn sm ghost" onClick={() => reset(false)}>{T('cancelClear')}</button>}</div>}
+      </header>
+
+      <div className="kiosk-card">
+        {stepNo > 0 && <ol className="kx-steps">{[T('stepFind'), T('stepDetails'), T('stepToken')].map((label, i) => <li key={label} className={i + 1 < stepNo ? 'past' : i + 1 === stepNo ? 'on' : ''}><i>{i + 1 < stepNo ? <IconCheck size={14} stroke={3} /> : i + 1}</i>{label}</li>)}</ol>}
+        {session && screen !== 'welcome' && screen !== 'done' && <div className="row between"><span className="kiosk-timer">{T('sessionClears', { n: secondsLeft ?? '…' })}</span><button className="btn sm ghost" onClick={() => reset(false)}>{T('cancelClear')}</button></div>}
         {err && <div className="callout bad">{err}</div>}
 
         {screen === 'welcome' && (<>
-          <h1>{T('welcome')}</h1>
-          <p className="muted">{T('welcomeSub')}</p>
-          <button className="btn primary lg" disabled={busy} onClick={() => start('identify')}>{T('start')}</button>
-          <button className="btn lg" onClick={() => start('help')}><IconHandStop size={20} />{T('needHelp')}</button>
+          <div className="kx-hello">
+            <BrandLogo branding={branding} name={clinicName} size={88} className="big" />
+            <h1>{branding?.welcome || T('welcome')}</h1>
+            <p className="muted">{T('chooseLang')}</p>
+            <div className="kx-langs">{langs.map((l) => <button key={l.code} className={lang === l.code ? 'on' : ''} onClick={() => changeLang(l.code)}>{l.name}</button>)}</div>
+          </div>
+          <button className="kx-go" disabled={busy} onClick={() => start('identify')}><IconDoorEnter size={30} />{T('checkIn')}</button>
+          <div className="kx-alt">
+            <button disabled={busy} onClick={() => start('walkin')}><IconUserQuestion size={22} />{T('walkIn')}</button>
+            <button disabled={busy} onClick={() => start('help')}><IconHandStop size={22} />{T('needHelp')}</button>
+          </div>
         </>)}
+        {screen === 'walkin' && <WalkIn session={session} call={call} busy={busy} T={T} onBack={() => reset(false)} />}
         {screen === 'identify' && <Identify session={session} busy={busy} call={call} T={T} onFound={(s) => { setSession(s); setScreen(s.choose ? 'choose' : 'home'); }} />}
         {screen === 'choose' && session?.choose && (<>
           <h2>{T('whichOfYou')}</h2>
@@ -82,12 +100,19 @@ export default function Kiosk({ locationId, kioskCode }) {
         {screen === 'consent' && <Consent session={session} call={call} busy={busy} T={T} onDone={() => setScreen('home')} />}
         {screen === 'help' && <Help session={session} call={call} busy={busy} T={T} onBack={() => setScreen(session?.patient ? 'home' : 'welcome')} />}
         {screen === 'done' && (<>
-          <IconCheck size={48} style={{ color: 'var(--good)' }} />
-          <h1>{T('checkedIn')}, {session?.patient?.firstName}.</h1>
-          <div><div className="muted">{T('yourToken')}</div><div className="kiosk-token">{session?.visit?.token}</div></div>
-          <p className="muted">{session?.visit?.missing?.length ? `${T('deskWillHelp')} ${session.visit.missing.join(', ')}. ` : ''}{T('haveSeat')} {session?.appointment?.provider} {T('willSee')}</p>
-          {session?.appointment?.fee > 0 && session.appointment.paymentStatus === 'unpaid' && <p className="muted">{T('fee')}: <b>{fmtMoney(session.appointment.fee)}</b> — {T('payAtDesk')}.</p>}
-          <button className="btn primary lg" onClick={() => reset(false)}>{T('done')}</button>
+          <div className="kx-done">
+            <span className="tick"><IconCheck size={34} stroke={3} /></span>
+            <h1>{T('checkedIn')}, {session?.patient?.firstName}.</h1>
+            <div className="kx-ticket">
+              <div className="lbl">{T('yourToken')}</div>
+              <div className="kiosk-token">{session?.visit?.token}</div>
+              <div className="ahead">{session?.visit?.ahead > 0 ? T('aheadOfYou', { n: session.visit.ahead }) : T('youAreNext')}</div>
+              <dl><div><dt><IconStethoscope size={16} />{T('withDentist')}</dt><dd>{session?.appointment?.provider}</dd></div><div><dt><IconClock size={16} />{T('timeLabel')}</dt><dd>{fmtTime(session?.appointment?.start)}</dd></div></dl>
+            </div>
+            <p className="muted">{session?.visit?.missing?.length ? `${T('deskWillHelp')} ${session.visit.missing.join(', ')}. ` : ''}{T('haveSeat')}</p>
+            {session?.appointment?.fee > 0 && session.appointment.paymentStatus === 'unpaid' && <p className="muted">{T('fee')}: <b>{fmtMoney(session.appointment.fee)}</b>, {T('payAtDesk')}.</p>}
+          </div>
+          <button className="kx-go" onClick={() => reset(false)}>{T('done')}</button>
           <AutoReset seconds={15} onFire={() => reset(true)} T={T} />
         </>)}
       </div>
@@ -114,11 +139,17 @@ function Identify({ session, call, busy, onFound, T }) {
   const ok = mode === 'phone' ? phone.replace(/\D/g, '').length >= 10 : mode === 'abha' ? abha.replace(/\D/g, '').length >= 14 || abha.includes('@') : (lastName && dob);
   return (<>
     <h2>{T('whoAreYou')}</h2>
-    <div className="row gap-6 wrap"><button className={`btn ${mode === 'phone' ? 'primary' : ''}`} onClick={() => setMode('phone')}>{T('mobile')}</button><button className={`btn ${mode === 'abha' ? 'primary' : ''}`} onClick={() => setMode('abha')}>{T('abha')}</button><button className={`btn ${mode === 'name' ? 'primary' : ''}`} onClick={() => setMode('name')}>{T('nameDob')}</button></div>
-    {mode === 'phone' && <input className="input lg" inputMode="tel" placeholder="98450 12345" value={phone} onChange={(e) => setPhone(e.target.value)} autoFocus onKeyDown={(e) => e.key === 'Enter' && submit()} />}
+    <div className="kx-modes"><button className={`btn ${mode === 'phone' ? 'primary' : ''}`} onClick={() => setMode('phone')}>{T('mobile')}</button><button className={`btn ${mode === 'abha' ? 'primary' : ''}`} onClick={() => setMode('abha')}>{T('abha')}</button><button className={`btn ${mode === 'name' ? 'primary' : ''}`} onClick={() => setMode('name')}>{T('nameDob')}</button></div>
+    {mode === 'phone' && (<>
+      <p className="muted">{T('enterMobile')}</p>
+      <div className="kx-number" aria-live="polite"><span className="cc">+91</span><span className={phone ? '' : 'ph'}>{phone ? phone.replace(/(\d{5})(\d{0,5})/, '$1 $2').trim() : '98450 12345'}</span></div>
+      <input className="kx-hidden" inputMode="numeric" value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))} autoFocus onKeyDown={(e) => e.key === 'Enter' && ok && submit()} aria-label={T('mobile')} />
+      <div className="kx-pad">{['1', '2', '3', '4', '5', '6', '7', '8', '9', 'clear', '0', 'back'].map((k) => (
+        <button key={k} type="button" className={k.length > 1 ? 'fn' : ''} onClick={() => setPhone(k === 'clear' ? '' : k === 'back' ? phone.slice(0, -1) : (phone + k).slice(0, 10))} aria-label={k === 'back' ? 'Delete last digit' : k === 'clear' ? T('clear') : k}>{k === 'back' ? <IconBackspace size={26} /> : k === 'clear' ? T('clear') : k}</button>))}</div>
+    </>)}
     {mode === 'abha' && <input className="input lg" placeholder="91-2345-6789-0123 or name@abdm" value={abha} onChange={(e) => setAbha(e.target.value)} autoFocus onKeyDown={(e) => e.key === 'Enter' && submit()} />}
     {mode === 'name' && <div className="grid two"><input className="input lg" placeholder={T('nameDob').split(' ')[0]} value={lastName} onChange={(e) => setLastName(e.target.value)} autoFocus /><input className="input lg" type="date" value={dob} onChange={(e) => setDob(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} /></div>}
-    <button className="btn primary lg" disabled={busy || !ok} onClick={submit}>{T('findAppt')}</button>
+    <button className="kx-go" disabled={busy || !ok} onClick={submit}>{T('findAppt')}</button>
     <p className="tiny muted">{T('onlyInitial')}</p>
   </>);
 }
@@ -218,5 +249,24 @@ function Help({ session, call, busy, onBack, T }) {
       <p>{T('helpSent')}</p>
       <button className="btn lg" onClick={onBack}>{T('back')}</button>
     </>)}
+  </>);
+}
+
+/** No appointment: the patient leaves a name and number, and the front desk is alerted on the arrivals board. */
+function WalkIn({ session, call, busy, onBack, T }) {
+  const [name, setName] = useState(''); const [phone, setPhone] = useState(''); const [sent, setSent] = useState(false);
+  const ok = name.trim().length > 1 && phone.replace(/\D/g, '').length >= 10;
+  if (sent) return (<>
+    <div className="kx-done"><span className="tick"><IconCheck size={34} stroke={3} /></span><h1>{T('walkInSent')}</h1></div>
+    <button className="kx-go" onClick={onBack}>{T('done')}</button>
+    <AutoReset seconds={12} onFire={onBack} T={T} />
+  </>);
+  return (<>
+    <h2>{T('walkInTitle')}</h2>
+    <p className="muted">{T('walkInSub')}</p>
+    <input className="input lg" placeholder={T('yourName')} value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+    <input className="input lg" inputMode="tel" placeholder={T('mobile')} value={phone} onChange={(e) => setPhone(e.target.value.replace(/[^\d ]/g, '').slice(0, 12))} />
+    <button className="kx-go" disabled={busy || !ok || !session} onClick={async () => { const s = await call(() => post(`/api/kiosk/sessions/${session.id}/help`, { note: `Walk-in without an appointment: ${name.trim()}, ${phone.trim()}. Wants to book.` })); if (s) setSent(true); }}>{T('tellDesk')}</button>
+    <button className="btn lg" onClick={onBack}>{T('back')}</button>
   </>);
 }

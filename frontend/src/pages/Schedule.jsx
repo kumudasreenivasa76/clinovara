@@ -20,7 +20,7 @@ export default function Schedule({ hash = '', branch, locations = [], providerId
   const blocks = usePoll(() => get(`/api/blocks?from=${rangeFrom}&to=${rangeTo}`), [rangeFrom, rangeTo], 15000);
   const waitlist = usePoll(() => get('/api/waitlist'), [], 15000);
   const reminders = usePoll(() => get('/api/reminders/due'), [], 15000);
-  const [booking, setBooking] = useState(params.get('patient') ? { patientId: params.get('patient') } : null);
+  const [booking, setBooking] = useState(params.get('patient') ? { patientId: params.get('patient') } : params.get('new') ? {} : null);
   const [blocking, setBlocking] = useState(null);
   const [open, setOpen] = useState(null);
   const [run] = useAction();

@@ -1,4 +1,4 @@
-import { find, fullName, dayKey, bad } from '../lib.js';
+import { brandOf, find, fullName, dayKey, bad } from '../lib.js';
 import { location } from './scheduling.js';
 import { sendCommunication } from './messaging.js';
 
@@ -55,7 +55,7 @@ export function buildReceipt(db, appointmentId) {
   const gst = Math.round((total - taxable) * 100) / 100;
   const description = [vt?.name || 'Dental visit', visit?.doctorNotes?.procedureDone].filter(Boolean).join(' — ');
   return {
-    receiptNo: a.receiptNo || null,
+    receiptNo: a.receiptNo || null, branding: brandOf(db.settings),
     date: dayKey(a.paidAt), paidAt: a.paidAt,
     clinic: { name: p.name, address: p.address, phone: p.phone, email: p.email, gstin: p.gstin, registrationNumber: p.registrationNumber, clinicalEstablishmentNo: p.clinicalEstablishmentNo, branch: location(db, a.locationId)?.name || '' },
     patient: { id: patient.id, name: fullName(patient), phone: patient.phone },

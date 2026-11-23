@@ -16,6 +16,9 @@ import conversationRoutes from './routes/conversations.js';
 import formRoutes from './routes/forms.js';
 import kioskRoutes from './routes/kiosk.js';
 import arrivalRoutes from './routes/arrivals.js';
+import frontDeskRoutes from './routes/frontdesk.js';
+import dentistRoutes from './routes/dentist.js';
+import voiceRoutes from './routes/voice.js';
 import treatmentRoutes from './routes/treatmentPlans.js';
 import communicationRoutes from './routes/communications.js';
 import insightRoutes from './routes/insights.js';
@@ -38,16 +41,49 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 /** Routes a patient-facing page may call without a staff session, given a clinic (x-tenant header or ?t=slug). */
 const PUBLIC_TENANT = [
   [/^\/kiosk\//, ['GET', 'POST']],
-  [/^\/forms\/token\//, ['GET', 'PUT']],
+  [/^\/forms\/token\//, ['GET', 'PUT', 'POST']],
   [/^\/forms\/sections$/, ['GET']],
   [/^\/arrivals\/board$/, ['GET']],
   [/^\/conversations(\/[^/]+(\/messages)?)?$/, ['GET', 'POST']],
   [/^\/calls(\/[^/]+(\/messages|\/end))?$/, ['POST']],
+  [/^\/voice\/(incoming|calls\/[^/]+\/(turn|tool|transcript|end))$/, ['POST']], // the phone media bridge; each call checks x-voice-secret
   [/^\/patients$/, ['GET']],
   [/^\/settings$/, ['GET']],
   [/^\/public\/(clinic|slots|book)$/, ['GET', 'POST']],
   [/^\/calendar\/appointment\//, ['GET']],
 ];
+/**
+ * Who may reach what, for logged-in staff. Checked for every request before any route runs, so a
+ * screen hidden in the app is also closed on the server. First matching rule wins; anything not
+ * listed is open to every staff role and guarded inside its own route where it needs to be.
+ */
+const OWNERS = ['owner', 'admin'];
+const DESK = ['owner', 'admin', 'front_desk'];
+const CLINICAL = ['owner', 'admin', 'dentist', 'hygienist'];
+const ANY = null; // every method
+export const ROLE_RULES = [
+  { area: 'Recent activity feed', re: /^\/admin\/activity$/, methods: ['GET'], roles: [...DESK, 'dentist', 'hygienist'] },
+  { area: 'Full data export, import and reset', re: /^\/admin(\/|$)/, methods: ANY, roles: OWNERS },
+  { area: 'Integrations, API keys and webhooks', re: /^\/integrations(\/|$)/, methods: ANY, roles: OWNERS },
+  { area: 'Phone voice assistant settings', re: /^\/voice\/(status|settings)$/, methods: ANY, roles: OWNERS },
+  { area: 'Clinic revenue dashboard', re: /^\/dashboard(\/|$)/, methods: ANY, roles: OWNERS },
+  // /insights is open to all staff on purpose: the route itself leaves revenue out for anyone who is not an owner or admin.
+  { area: 'Team, roles and invitations', re: /^\/team(\/|$)/, methods: ANY, roles: OWNERS },
+  { area: 'Export the patient list', re: /^\/patients\/export\.csv$/, methods: ANY, roles: OWNERS },
+  { area: 'Import patients', re: /^\/patients\/import$/, methods: ANY, roles: OWNERS },
+  { area: 'Export or import the fee list', re: /^\/settings\/procedures\/(export\.csv|import)$/, methods: ANY, roles: OWNERS },
+  { area: 'Change clinic settings and branding', re: /^\/settings(\/|$)/, methods: ['PUT', 'POST', 'PATCH', 'DELETE'], roles: OWNERS },
+  { area: 'Create, edit, send or delete your own forms', re: /^\/forms\/templates/, methods: ['POST', 'PUT', 'PATCH', 'DELETE'], roles: OWNERS },
+  { area: 'Marketing and campaigns', re: /^\/marketing(\/|$)/, methods: ANY, roles: DESK },
+  { area: 'Front desk dashboard, tasks and handoff notes', re: /^\/frontdesk(\/|$)/, methods: ANY, roles: DESK },
+  { area: 'Take payments and issue receipts', re: /^\/arrivals\/[^/]+\/(payment|receipt\/send)$/, methods: ['POST'], roles: DESK },
+  { area: 'Dentist workspace', re: /^\/dentist(\/|$)/, methods: ANY, roles: CLINICAL },
+  { area: 'Clinical notes, prescriptions and charts', re: /^\/doctor(\/|$)/, methods: ANY, roles: CLINICAL },
+];
+const ruleFor = (path, method) => ROLE_RULES.find((r) => r.re.test(path) && (!r.methods || r.methods.includes(method)));
+/** The same table in plain words, for the Roles and permissions screen. */
+export const permissionMatrix = () => ROLE_RULES.map((r) => ({ area: r.area, access: r.methods && !r.methods.includes('GET') ? 'change' : 'view and change', roles: r.roles }));
+
 /** Configuration endpoints only owners and admins may change. */
 const MANAGE_ONLY = [[/^\/settings/, ['PUT', 'POST']], [/^\/integrations/, ['POST', 'PUT', 'PATCH', 'DELETE']], [/^\/team/, ['POST', 'PATCH', 'DELETE']], [/^\/onboarding/, ['POST']], [/^\/admin\/(import|reset)/, ['POST']]];
 
@@ -55,6 +91,7 @@ export function createApp({ registry = createRegistry(), frontendBase = process.
   registry.ensureDemo();
   useTimezone(null);
   const app = express();
+  app.disable('x-powered-by');
   if (process.env.NODE_ENV === 'production') app.set('trust proxy', 1);
   app.use(express.json({ limit: '8mb', type: ['application/json', 'application/fhir+json'] }));
   app.use((req, res, next) => {
@@ -101,7 +138,7 @@ export function createApp({ registry = createRegistry(), frontendBase = process.
       const key = req.get('x-api-key') || (req.get('authorization') || '').replace(/^Bearer\s+/i, '');
       const hit = key ? registry.findTenant((db) => db.settings.integrations?.apiKey && db.settings.integrations.apiKey === key) : null;
       if (hit) { tenant = hit.tenant; role = 'integration'; userName = 'EHR integration'; }
-      else if (req.query.t) { const t = registry.tenantBySlug(String(req.query.t)); if (t && !registry.tenantStore(t.id).db.settings.integrations?.apiKey) { tenant = t; role = 'integration'; userName = 'EHR integration'; } }
+      else if (req.query.t) { const t = registry.tenantBySlug(String(req.query.t)); if (t && t.demo && !registry.tenantStore(t.id).db.settings.integrations?.apiKey) { tenant = t; role = 'integration'; userName = 'EHR integration'; } } // keyless access is for the sample-data demo clinic only
       if (!tenant) return next(new HttpError(401, 'Invalid or missing API key (x-api-key header)'));
     } else {
       const allowed = PUBLIC_TENANT.some(([re, methods]) => re.test(req.path) && methods.includes(req.method));
@@ -113,6 +150,10 @@ export function createApp({ registry = createRegistry(), frontendBase = process.
       role = 'public'; userName = req.get('x-user-name') || (req.path.startsWith('/kiosk') ? 'Kiosk' : 'Patient');
     }
     if (role === 'public' && req.path === '/patients' && !tenant.demo) return next(new HttpError(401, 'Please log in'));
+    if (req.session) {
+      const rule = ruleFor(req.path, req.method);
+      if (rule && !rule.roles.includes(role)) return next(new HttpError(403, `Your role does not have access to this: ${rule.area.toLowerCase()}`));
+    }
     if (role !== 'integration' && role !== 'public' && MANAGE_ONLY.some(([re, methods]) => re.test(req.path) && methods.includes(req.method)) && !MANAGERS.has(role)) return next(new HttpError(403, 'Only clinic owners and admins can change this'));
     const store = registry.tenantStore(tenant.id);
     req.tenant = tenant; req.store = store; req.db = store.db; req.role = role; req.user = userName;
@@ -129,6 +170,9 @@ export function createApp({ registry = createRegistry(), frontendBase = process.
   app.use('/api/forms', formRoutes);
   app.use('/api/kiosk', kioskRoutes);
   app.use('/api/arrivals', arrivalRoutes);
+  app.use('/api/frontdesk', frontDeskRoutes);
+  app.use('/api/dentist', dentistRoutes);
+  app.use('/api/voice', voiceRoutes);
   app.use('/api/treatment-plans', treatmentRoutes);
   app.use('/api/communications', communicationRoutes);
   app.use('/api/insights', insightRoutes);

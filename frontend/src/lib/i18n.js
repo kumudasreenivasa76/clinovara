@@ -1,6 +1,7 @@
 /** Patient-facing strings for the kiosk and the pre-visit form. Add a language by adding a key. Missing keys fall back to English. */
 const STR = {
   en: {
+    checkIn: 'Check in', walkIn: 'I do not have an appointment', chooseLang: 'Choose your language', enterMobile: 'Enter your mobile number', aheadOfYou: '{n} ahead of you', youAreNext: 'You are next', walkInTitle: 'No appointment? We will help.', walkInSub: 'Tell us your name and number. The front desk will call you to book a time.', yourName: 'Your name', tellDesk: 'Tell the front desk', walkInSent: 'Thank you. Please take a seat. The front desk will call your name.', stepFind: 'Find you', stepDetails: 'Your details', stepToken: 'Token', withDentist: 'Dentist', timeLabel: 'Time',
     welcome: 'Welcome. Let\'s get you checked in.', welcomeSub: 'Tap below to start. You will confirm who you are, finish any forms, share your insurance or ABHA details, and sign consent. It takes about two minutes.',
     start: 'Start check-in', needHelp: 'I need help from the front desk', largerText: 'Larger text', highContrast: 'High contrast', askHelp: 'Ask for help', cancelClear: 'Cancel and clear', sessionClears: 'Screen clears after {n}s of inactivity',
     whoAreYou: 'First, tell us who you are', mobile: 'Mobile number', nameDob: 'Last name and birthday', abha: 'ABHA number', findAppt: 'Find my appointment', onlyInitial: 'We only show your first name and last initial on this screen.',
@@ -24,6 +25,7 @@ const STR = {
     lastCleanOpts: ['under 6 months', '6–12 months', 'over a year', 'never', 'not sure'], anxOpts: ['no', 'a little', 'very'], bleedOpts: ['no', 'sometimes', 'often'],
   },
   hi: {
+    checkIn: 'चेक-इन करें', walkIn: 'मेरा अपॉइंटमेंट नहीं है', chooseLang: 'अपनी भाषा चुनें', enterMobile: 'अपना मोबाइल नंबर डालें', aheadOfYou: 'आपसे पहले {n}', youAreNext: 'अगली बारी आपकी है', walkInTitle: 'अपॉइंटमेंट नहीं है? हम मदद करेंगे।', walkInSub: 'अपना नाम और नंबर बताइए। फ्रंट डेस्क आपको समय देने के लिए बुलाएगा।', yourName: 'आपका नाम', tellDesk: 'फ्रंट डेस्क को बताएं', walkInSent: 'धन्यवाद। कृपया बैठें। फ्रंट डेस्क आपका नाम पुकारेगा।', stepFind: 'पहचान', stepDetails: 'विवरण', stepToken: 'टोकन', withDentist: 'डॉक्टर', timeLabel: 'समय',
     welcome: 'स्वागत है। चलिए आपका चेक-इन करते हैं।', welcomeSub: 'शुरू करने के लिए नीचे टैप करें। आप अपनी पहचान की पुष्टि करेंगे, फ़ॉर्म पूरे करेंगे, बीमा या ABHA विवरण देंगे और सहमति पर हस्ताक्षर करेंगे। इसमें लगभग दो मिनट लगते हैं।',
     start: 'चेक-इन शुरू करें', needHelp: 'मुझे फ्रंट डेस्क से मदद चाहिए', largerText: 'बड़ा टेक्स्ट', highContrast: 'हाई कॉन्ट्रास्ट', askHelp: 'मदद माँगें', cancelClear: 'रद्द करें और साफ़ करें', sessionClears: '{n} सेकंड निष्क्रियता के बाद स्क्रीन साफ़ हो जाएगी',
     whoAreYou: 'पहले बताइए आप कौन हैं', mobile: 'मोबाइल नंबर', nameDob: 'उपनाम और जन्मतिथि', abha: 'ABHA नंबर', findAppt: 'मेरी अपॉइंटमेंट ढूँढें', onlyInitial: 'इस स्क्रीन पर केवल आपका पहला नाम और उपनाम का पहला अक्षर दिखता है।',
@@ -47,6 +49,7 @@ const STR = {
     lastCleanOpts: ['6 महीने से कम', '6–12 महीने', 'एक साल से अधिक', 'कभी नहीं', 'पता नहीं'], anxOpts: ['नहीं', 'थोड़ी', 'बहुत'], bleedOpts: ['नहीं', 'कभी-कभी', 'अक्सर'],
   },
   kn: {
+    checkIn: 'ಚೆಕ್-ಇನ್', walkIn: 'ನನಗೆ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಇಲ್ಲ', chooseLang: 'ನಿಮ್ಮ ಭಾಷೆ ಆಯ್ಕೆಮಾಡಿ', enterMobile: 'ನಿಮ್ಮ ಮೊಬೈಲ್ ಸಂಖ್ಯೆ ನಮೂದಿಸಿ', aheadOfYou: 'ನಿಮಗಿಂತ ಮೊದಲು {n}', youAreNext: 'ಮುಂದಿನ ಸರದಿ ನಿಮ್ಮದು', walkInTitle: 'ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಇಲ್ಲವೇ? ನಾವು ಸಹಾಯ ಮಾಡುತ್ತೇವೆ.', walkInSub: 'ನಿಮ್ಮ ಹೆಸರು ಮತ್ತು ಸಂಖ್ಯೆ ತಿಳಿಸಿ. ಫ್ರಂಟ್ ಡೆಸ್ಕ್ ನಿಮ್ಮನ್ನು ಕರೆಯುತ್ತದೆ.', yourName: 'ನಿಮ್ಮ ಹೆಸರು', tellDesk: 'ಫ್ರಂಟ್ ಡೆಸ್ಕ್‌ಗೆ ತಿಳಿಸಿ', walkInSent: 'ಧನ್ಯವಾದ. ದಯವಿಟ್ಟು ಕುಳಿತುಕೊಳ್ಳಿ. ಫ್ರಂಟ್ ಡೆಸ್ಕ್ ನಿಮ್ಮ ಹೆಸರು ಕರೆಯುತ್ತದೆ.', stepFind: 'ಗುರುತು', stepDetails: 'ವಿವರಗಳು', stepToken: 'ಟೋಕನ್', withDentist: 'ವೈದ್ಯರು', timeLabel: 'ಸಮಯ',
     welcome: 'ಸ್ವಾಗತ. ನಿಮ್ಮ ಚೆಕ್-ಇನ್ ಮಾಡೋಣ.', welcomeSub: 'ಪ್ರಾರಂಭಿಸಲು ಕೆಳಗೆ ಟ್ಯಾಪ್ ಮಾಡಿ. ನಿಮ್ಮ ಗುರುತನ್ನು ದೃಢೀಕರಿಸಿ, ಫಾರ್ಮ್‌ಗಳನ್ನು ಪೂರ್ಣಗೊಳಿಸಿ, ವಿಮೆ ಅಥವಾ ABHA ವಿವರ ನೀಡಿ ಮತ್ತು ಸಮ್ಮತಿಗೆ ಸಹಿ ಮಾಡಿ. ಸುಮಾರು ಎರಡು ನಿಮಿಷ ಬೇಕು.',
     start: 'ಚೆಕ್-ಇನ್ ಪ್ರಾರಂಭಿಸಿ', needHelp: 'ನನಗೆ ಫ್ರಂಟ್ ಡೆಸ್ಕ್ ಸಹಾಯ ಬೇಕು', largerText: 'ದೊಡ್ಡ ಅಕ್ಷರ', highContrast: 'ಹೆಚ್ಚು ಕಾಂಟ್ರಾಸ್ಟ್', askHelp: 'ಸಹಾಯ ಕೇಳಿ', cancelClear: 'ರದ್ದುಮಾಡಿ ಮತ್ತು ಅಳಿಸಿ', sessionClears: '{n} ಸೆಕೆಂಡ್ ನಿಷ್ಕ್ರಿಯತೆಯ ನಂತರ ಪರದೆ ಅಳಿಸಲಾಗುತ್ತದೆ',
     whoAreYou: 'ಮೊದಲು, ನೀವು ಯಾರು ಎಂದು ತಿಳಿಸಿ', mobile: 'ಮೊಬೈಲ್ ಸಂಖ್ಯೆ', nameDob: 'ಉಪನಾಮ ಮತ್ತು ಹುಟ್ಟಿದ ದಿನಾಂಕ', abha: 'ABHA ಸಂಖ್ಯೆ', findAppt: 'ನನ್ನ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಹುಡುಕಿ', onlyInitial: 'ಈ ಪರದೆಯಲ್ಲಿ ನಿಮ್ಮ ಮೊದಲ ಹೆಸರು ಮತ್ತು ಉಪನಾಮದ ಮೊದಲ ಅಕ್ಷರ ಮಾತ್ರ ತೋರಿಸಲಾಗುತ್ತದೆ.',

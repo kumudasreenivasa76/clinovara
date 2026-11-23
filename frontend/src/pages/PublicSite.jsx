@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { brandVars, BrandLogo } from '../lib/brand.jsx';
 import { IconPhone, IconBrandWhatsapp, IconMapPin, IconClock, IconCheck, IconArrowLeft } from '@tabler/icons-react';
 import Logo from '../components/Logo.jsx';
 import SiteChat from '../components/SiteChat.jsx';
@@ -34,11 +35,11 @@ export default function PublicSite() {
   const cats = [...new Set(c.procedures.map((p) => p.category))];
   const link = (id, label) => <a href={`#${id}`} onClick={(e) => { e.preventDefault(); jump(id); }}>{label}</a>;
   return (
-    <div className="site">
+    <div className="site" style={brandVars(c.branding)}>
       <SiteStyle />
       <SiteChat practice={c.practice} />
       <header className="site-top"><div className="site-wrap row">
-        <span className="brand"><Logo size={26} /> {c.practice.name}</span>
+        <span className="brand"><BrandLogo branding={c.branding} name={c.practice.name} size={32} className="on-dark" /> {c.practice.name}</span>
         <nav>{link('book-now', 'Book')}{link('doctors', 'Doctors')}{c.showFees && link('fees', 'Fees')}{link('visit', 'Visit us')}</nav>
       </div></header>
       <section className="site-hero"><div className="site-wrap">
@@ -167,12 +168,12 @@ function SiteStyle() {
   return <style>{`
 .site{min-height:100vh;background:var(--ground);color:var(--text);font-family:'Public Sans',system-ui,sans-serif}
 .site-wrap{max-width:1040px;margin:0 auto;padding:0 20px}.site .row{display:flex;align-items:center}.site .gap{gap:12px;flex-wrap:wrap}.site .wrapr{align-items:flex-end}
-.site-top{background:var(--rail);color:#fff;position:sticky;top:0;z-index:5}.site-top .row{justify-content:space-between;height:56px}.site-top .brand{display:flex;gap:8px;align-items:center;font-family:Fraunces,serif;font-size:19px}.site-top nav{display:flex;gap:18px}.site-top nav a{color:var(--rail-text);text-decoration:none;font-size:14px}
-.site-hero{background:linear-gradient(180deg,var(--rail-2),var(--rail));color:#fff;padding:56px 0 48px}.site-hero h1{font-family:Fraunces,serif;font-size:clamp(30px,5vw,46px);margin:0 0 8px}.site-hero p{color:var(--rail-text);margin:0 0 22px;font-size:17px}
+.site-top{background:var(--rail);color:#fff;position:sticky;top:0;z-index:5}.site-top .row{justify-content:space-between;height:56px}.site-top .brand{display:flex;gap:8px;align-items:center;font-family:var(--display);font-weight:700;letter-spacing:-0.02em;font-size:19px}.site-top nav{display:flex;gap:18px}.site-top nav a{color:var(--rail-text);text-decoration:none;font-size:14px}
+.site-hero{background:linear-gradient(180deg,var(--rail-2),var(--rail));color:#fff;padding:56px 0 48px}.site-hero h1{font-family:var(--display);font-weight:700;letter-spacing:-0.02em;font-size:clamp(30px,5vw,46px);margin:0 0 8px}.site-hero p{color:var(--rail-text);margin:0 0 22px;font-size:17px}
 .sbtn{display:inline-flex;align-items:center;gap:6px;padding:10px 16px;border-radius:6px;border:1px solid var(--border-strong);background:#fff;color:var(--text);font:inherit;font-size:14px;cursor:pointer;text-decoration:none}.sbtn.primary{background:var(--accent);border-color:var(--accent);color:#fff}.sbtn:disabled{opacity:.5;cursor:not-allowed}
-.site-sec{padding:34px 0 6px}.site-sec h2{font-family:Fraunces,serif;font-size:26px;margin:0 0 14px}
+.site-sec{padding:34px 0 6px}.site-sec h2{font-family:var(--display);font-weight:700;letter-spacing:-0.02em;font-size:26px;margin:0 0 14px}
 .scard{background:#fff;border:1px solid var(--border);border-radius:6px;padding:16px;margin-bottom:12px;display:flex;flex-direction:column;gap:6px}.scard.ok{align-items:center;text-align:center;color:var(--accent)}.scard.ok p{color:var(--text);margin:0}
-.grid3{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}.grid3 .scard{margin:0}.avatar{width:42px;height:42px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-family:Fraunces,serif;font-size:20px}
+.grid3{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}.grid3 .scard{margin:0}.avatar{width:42px;height:42px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-family:var(--display);font-weight:700;letter-spacing:-0.02em;font-size:20px}
 .site .muted{color:var(--muted)}.site .tiny{font-size:12px}.site .small{font-size:13.5px;display:flex;gap:6px;align-items:center}.site a.small{color:var(--accent)}
 .ftable{width:100%;border-collapse:collapse;font-size:14px}.ftable td{padding:7px 0;border-bottom:1px solid var(--border)}.ftable .r{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .bsteps{display:flex;gap:16px;font-size:13px;color:var(--faint);margin-bottom:12px;flex-wrap:wrap}.bsteps .on{color:var(--accent);font-weight:600}.bsteps .past{color:var(--muted)}

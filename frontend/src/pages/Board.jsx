@@ -1,4 +1,5 @@
 import Logo from '../components/Logo.jsx';
+import { brandVars, BrandLogo } from '../lib/brand.jsx';
 import React, { useEffect, useRef, useState } from 'react';
 import { IconVolume, IconVolumeOff } from '@tabler/icons-react';
 import { get } from '../lib/api.js';
@@ -56,9 +57,9 @@ export default function Board({ locationId }) {
   const totalWaiting = waitingLanes.reduce((n, l) => n + l.queue.length, 0);
 
   return (
-    <div className="tv">
+    <div className="tv" style={brandVars(data?.branding)}>
       <header className="tv-head">
-        <div className="tv-brand"><div className="brand-mark"><Logo size={40} /></div><div><div className="tv-title">{data?.practice || 'Clinovara'}</div>{data?.location?.name && <div className="tv-sub">{data.location.name}</div>}</div></div>
+        <div className="tv-brand"><BrandLogo branding={data?.branding} name={data?.practice} size={56} /><div><div className="tv-title">{data?.practice || 'Clinovara'}</div>{data?.location?.name && <div className="tv-sub">{data.location.name}</div>}</div></div>
         <div className="tv-time"><div className="tv-clock">{clock.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}</div><div className="tv-date">{clock.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</div></div>
       </header>
 

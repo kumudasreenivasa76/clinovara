@@ -6,6 +6,22 @@ export const ROLE_LABEL = { owner: 'Owner', admin: 'Admin', front_desk: 'Front d
 /** Who may change clinic configuration, team and integrations. */
 export const MANAGERS = new Set(['owner', 'admin']);
 
+/** What a password a person chooses must contain. The seeded demo logins are exempt: they call hashPassword directly. */
+export const PASSWORD_RULES = [
+  ['At least 8 characters', (p) => p.length >= 8],
+  ['An uppercase letter (A to Z)', (p) => /[A-Z]/.test(p)],
+  ['A lowercase letter (a to z)', (p) => /[a-z]/.test(p)],
+  ['A number (0 to 9)', (p) => /\d/.test(p)],
+  ['A special character (such as ! @ # $ %)', (p) => /[^A-Za-z0-9\s]/.test(p)],
+];
+/** Checks a chosen password against the rules, then hashes it. */
+export function strongPassword(password) {
+  const p = String(password || '');
+  const missing = PASSWORD_RULES.filter(([, ok]) => !ok(p)).map(([label]) => label[0].toLowerCase() + label.slice(1));
+  if (missing.length) bad(`Password needs: ${missing.join(', ')}`);
+  return hashPassword(p);
+}
+
 export function hashPassword(password) {
   if (!password || String(password).length < 8) bad('Password must be at least 8 characters');
   const salt = crypto.randomBytes(16).toString('hex');

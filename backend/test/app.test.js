@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import http from 'node:http';
 import { createApp } from '../src/app.js';
 import { createRegistry } from '../src/registry.js';
@@ -39,7 +39,7 @@ async function signup(f) {
 describe('accounts, clinics and onboarding', () => {
   it('registers a clinic, guards routes, and tracks onboarding honestly', async () => {
     expect((await raw('GET', '/api/arrivals')).status).toBe(401);
-    const reg = await signup({ name: 'Dr Test', email: 'T@Example.in', password: 'secret123', clinicName: 'Test Dental' });
+    const reg = await signup({ name: 'Dr Test', email: 'T@Example.in', password: 'Secret@123', clinicName: 'Test Dental' });
     expect(reg.status).toBe(201);
     expect(reg.body.tenant.slug).toBe('test-dental');
     expect(reg.body.role).toBe('owner');
@@ -57,15 +57,15 @@ describe('accounts, clinics and onboarding', () => {
     expect(ob.steps.find((x) => x.key === 'team').done).toBe(true);
     expect(ob.steps.find((x) => x.key === 'profile').done).toBe(true);
     expect(ob.percent).toBeGreaterThan(30);
-    const noCode = await raw('POST', '/api/auth/register', { name: 'Y', email: 'y@example.in', phone: '99999 11111', dial: '91', password: 'secret123', confirmPassword: 'secret123', clinicName: 'Y', clinicType: 'General dental clinic', country: 'India', city: 'X', state: 'Karnataka', acceptTerms: true });
+    const noCode = await raw('POST', '/api/auth/register', { name: 'Y', email: 'y@example.in', phone: '99999 11111', dial: '91', password: 'Secret@123', confirmPassword: 'Secret@123', clinicName: 'Y', clinicType: 'General dental clinic', country: 'India', city: 'X', state: 'Karnataka', acceptTerms: true });
     expect(noCode.status).toBe(400);
-    const mismatch = await signup({ name: 'Y', email: 'y@example.in', password: 'secret123', confirmPassword: 'other1234', clinicName: 'Y' });
+    const mismatch = await signup({ name: 'Y', email: 'y@example.in', password: 'Secret@123', confirmPassword: 'Other@1234', clinicName: 'Y' });
     expect(mismatch.status).toBe(400);
-    const dup = await signup({ name: 'X', email: 't@example.in', password: 'secret123', clinicName: 'Other' });
+    const dup = await signup({ name: 'X', email: 't@example.in', password: 'Secret@123', clinicName: 'Other' });
     expect(dup.status).toBe(409);
     const bad = await raw('POST', '/api/auth/login', { email: 't@example.in', password: 'wrong' });
     expect(bad.status).toBe(401);
-    const ok = await raw('POST', '/api/auth/login', { email: 't@example.in', password: 'secret123' });
+    const ok = await raw('POST', '/api/auth/login', { email: 't@example.in', password: 'Secret@123' });
     expect(ok.body.tenant.slug).toBe('test-dental');
   });
   it('invites staff with roles and enforces what they can change', async () => {
@@ -73,7 +73,7 @@ describe('accounts, clinics and onboarding', () => {
     expect(inv.status).toBe(201);
     const tok = inv.body.link.split('/invite/')[1];
     expect((await raw('GET', `/api/auth/invite/${tok}`)).body.clinic).toBe('SmileCare Dental');
-    const acc = await raw('POST', `/api/auth/invite/${tok}/accept`, { password: 'kavya1234', phone: '9000000001' });
+    const acc = await raw('POST', `/api/auth/invite/${tok}/accept`, { password: 'Kavya@1234', phone: '9000000001' });
     expect(acc.status).toBe(200);
     expect(acc.body.role).toBe('front_desk');
     const K = { authorization: `Bearer ${acc.body.token}` };
@@ -89,7 +89,7 @@ describe('accounts, clinics and onboarding', () => {
     expect(ver.body.user.name).toBe('Kavya');
   });
   it('isolates clinics from each other', async () => {
-    const other = await signup({ name: 'O', email: 'o@example.in', password: 'secret123', clinicName: 'Other Dental' });
+    const other = await signup({ name: 'O', email: 'o@example.in', password: 'Secret@123', clinicName: 'Other Dental' });
     const O = { authorization: `Bearer ${other.body.token}` };
     expect((await raw('GET', '/api/appointments', null, O)).body.length).toBe(0);
     expect((await api('GET', '/api/appointments')).body.length).toBeGreaterThan(5);
@@ -282,7 +282,7 @@ describe('marketing with human approval', () => {
     expect(draft.body.body).toMatch(/Diwali/);
     // Front desk (non-manager) can draft and submit but not approve or send
     const inv = (await api('POST', '/api/team/invites', { email: 'fd@example.in', role: 'front_desk', name: 'FD' })).body;
-    const fd = (await raw('POST', `/api/auth/invite/${inv.link.split('/invite/')[1]}/accept`, { password: 'fdfdfdfd' })).body;
+    const fd = (await raw('POST', `/api/auth/invite/${inv.link.split('/invite/')[1]}/accept`, { password: 'Fdfd@1234' })).body;
     const FD = { authorization: `Bearer ${fd.token}` };
     const c = (await raw('POST', '/api/marketing/campaigns', { goal: 'festival', segment: 'all', lang: 'hi', body: draft.body.body, festival: 'Diwali' }, FD)).body;
     expect(c.status).toBe('draft');
@@ -344,7 +344,7 @@ describe('verification delivery and launch rules', () => {
     });
   });
   it('takes a new clinic from sign-up to live, end to end', async () => {
-    const reg = await signup({ name: 'Dr Live', email: 'live@example.in', password: 'secret123', clinicName: 'Live Dental' });
+    const reg = await signup({ name: 'Dr Live', email: 'live@example.in', password: 'Secret@123', clinicName: 'Live Dental' });
     expect(reg.status).toBe(201);
     const H = { authorization: `Bearer ${reg.body.token}` };
     const s = (await raw('GET', '/api/settings', null, H)).body;
@@ -404,13 +404,13 @@ describe('roles and providers', () => {
   });
 
   it('gives each invited role only what it should have', async () => {
-    const owner = (await signup({ name: 'Own Er', email: 'roles-owner@example.in', password: 'secret123', clinicName: 'Roles Dental' })).body;
+    const owner = (await signup({ name: 'Own Er', email: 'roles-owner@example.in', password: 'Secret@123', clinicName: 'Roles Dental' })).body;
     const O = { authorization: `Bearer ${owner.token}` };
     const join = async (role, email) => {
       const inv = await raw('POST', '/api/team/invites', { email, role, name: role }, O);
       expect(JSON.stringify(inv.body)).toContain('link');
       const tok = inv.body.link.split('/invite/')[1];
-      const acc = await raw('POST', `/api/auth/invite/${tok}/accept`, { name: role, phone: '99999 44444', password: 'secret123' });
+      const acc = await raw('POST', `/api/auth/invite/${tok}/accept`, { name: role, phone: '99999 44444', password: 'Secret@123' });
       expect(acc.status).toBe(200); expect(acc.body.role).toBe(role);
       return { authorization: `Bearer ${acc.body.token}` };
     };
@@ -436,7 +436,7 @@ describe('roles and providers', () => {
 describe('scheduling for a newly set-up clinic', () => {
   it('offers slots in the clinic time zone whatever zone the server runs in, then books, blocks double-booking, reschedules and cancels', async () => {
     process.env.TZ = 'UTC'; // a typical cloud server; the request handler must switch to the clinic's zone
-    const reg = await signup({ name: 'Dr Sched', email: 'sched@example.in', password: 'secret123', clinicName: 'Sched Dental' });
+    const reg = await signup({ name: 'Dr Sched', email: 'sched@example.in', password: 'Secret@123', clinicName: 'Sched Dental' });
     const H = { authorization: `Bearer ${reg.body.token}` }; const T = { 'x-tenant': reg.body.tenant.slug };
     const s = (await raw('GET', '/api/settings', null, H)).body;
     const hours = { mon: ['09:00', '19:00'], tue: ['09:00', '19:00'], wed: ['09:00', '19:00'], thu: ['09:00', '19:00'], fri: ['09:00', '19:00'], sat: ['09:00', '14:00'], sun: null };
@@ -557,14 +557,14 @@ describe('Claude-powered assistant (scripted model)', () => {
 
 describe('website visitors cannot reach patient data', () => {
   it('keeps conversations private, ties each chat to its owner, and never links a visitor to a patient they name', async () => {
-    const reg = await signup({ name: 'Dr Priv', email: 'priv@example.in', password: 'secret123', clinicName: 'Privacy Dental' });
+    const reg = await signup({ name: 'Dr Priv', email: 'priv@example.in', password: 'Secret@123', clinicName: 'Privacy Dental' });
     const H = { authorization: `Bearer ${reg.body.token}` }; const T = { 'x-tenant': reg.body.tenant.slug };
     const mk = await raw('POST', '/api/patients', { firstName: 'Real', lastName: 'Patient', dob: '1990-01-01', phone: '9845012345' }, H);
     expect(mk.status).toBe(201);
 
     expect((await raw('GET', '/api/conversations', null, T)).status).toBe(401);
     const settings = (await raw('GET', '/api/settings', null, T)).body;
-    expect(Object.keys(settings).sort()).toEqual(['locale', 'locations', 'practice', 'tenant']);
+    expect(Object.keys(settings).sort()).toEqual(['branding', 'locale', 'locations', 'practice', 'tenant']); // branding is the clinic's public logo and colour
     expect((await raw('GET', '/api/patients', null, T)).status).toBe(401);
 
     // A visitor who types an existing patient's id and phone still gets an anonymous web chat.
@@ -597,7 +597,7 @@ describe('owner dashboard analytics', () => {
     expect(busy.series.length).toBe(30); expect(busy.now.appointments).toBeGreaterThan(50); expect(busy.now.revenue).toBeGreaterThan(0);
     expect(busy.treatments.length).toBeGreaterThan(3); expect(busy.heat.rows.length).toBe(7); expect(busy.team.length).toBeGreaterThan(3);
     expect(busy.series.reduce((s, x) => s + x.revenue, 0)).toBe(busy.now.revenue);
-    const reg = await signup({ name: 'Dr Empty', email: 'empty@example.in', password: 'secret123', clinicName: 'Empty Dental' });
+    const reg = await signup({ name: 'Dr Empty', email: 'empty@example.in', password: 'Secret@123', clinicName: 'Empty Dental' });
     const empty = await raw('GET', '/api/dashboard?days=7', null, { authorization: `Bearer ${reg.body.token}` });
     expect(empty.status).toBe(200); expect(empty.body.now.appointments).toBe(0); expect(empty.body.now.revenue).toBe(0);
     expect(empty.body.treatments).toEqual([]); expect(empty.body.goal.target).toBe(0); expect(empty.body.now.noShowRate).toBe(0);
@@ -670,7 +670,7 @@ describe('growth and marketing, end to end', () => {
   });
 
   it('records where a new patient heard about the clinic and shows it in growth', async () => {
-    const reg = await signup({ name: 'Dr Grow', email: 'grow@example.in', password: 'secret123', clinicName: 'Grow Dental' });
+    const reg = await signup({ name: 'Dr Grow', email: 'grow@example.in', password: 'Secret@123', clinicName: 'Grow Dental' });
     const H = { authorization: `Bearer ${reg.body.token}` }; const T = { 'x-tenant': reg.body.tenant.slug };
     const s = (await raw('GET', '/api/settings', null, H)).body;
     await raw('PUT', '/api/settings', { ...s, providers: [{ id: 'p1', name: 'Dr Grow', role: 'Dentist', locationIds: [s.locations[0].id], consultationFee: 500 }] }, H);
@@ -725,7 +725,7 @@ describe('campaign send window and scheduling', () => {
 
 describe('owner who is also the dentist', () => {
   it('links the owner login to her dentist profile when she adds herself as a provider', async () => {
-    const reg = await signup({ name: 'Dr Lata Rao', email: 'lata@example.in', password: 'secret123', clinicName: 'Lata Dental' });
+    const reg = await signup({ name: 'Dr Lata Rao', email: 'lata@example.in', password: 'Secret@123', clinicName: 'Lata Dental' });
     const H = { authorization: `Bearer ${reg.body.token}` };
     expect((await raw('GET', '/api/auth/me', null, H)).body.providerId).toBeNull();
     const st = (await raw('GET', '/api/settings', null, H)).body;
@@ -738,7 +738,7 @@ describe('owner who is also the dentist', () => {
 
 describe('a new clinic does not inherit another clinic\'s claims', () => {
   it('starts with neutral answers about insurance, payment and procedures, and no pre-filled insurers or EMI', async () => {
-    const reg = await signup({ name: 'Dr Fresh', email: 'fresh@example.in', password: 'secret123', clinicName: 'Fresh Dental' });
+    const reg = await signup({ name: 'Dr Fresh', email: 'fresh@example.in', password: 'Secret@123', clinicName: 'Fresh Dental' });
     const s = (await raw('GET', '/api/settings', null, { authorization: `Bearer ${reg.body.token}` })).body;
     const all = s.faqs.map((f) => f.answer).join(' ');
     expect(all).not.toMatch(/Star Health|HDFC|Niva|ICICI|empanelled|no-cost EMI|CGHS|ESIC|SmileCare|Indiranagar|Whitefield/);
@@ -760,7 +760,7 @@ describe('chat booking understands "the earliest"', () => {
 
 describe('nothing from the demo clinic leaks into a new one', () => {
   it('has no demo names, places, doctors or links anywhere in a new clinic settings', async () => {
-    const reg = await signup({ name: 'Dr Clean', email: 'clean@example.in', password: 'secret123', clinicName: 'Clean Dental' });
+    const reg = await signup({ name: 'Dr Clean', email: 'clean@example.in', password: 'Secret@123', clinicName: 'Clean Dental' });
     const s = (await raw('GET', '/api/settings', null, { authorization: `Bearer ${reg.body.token}` })).body;
     const txt = JSON.stringify(s);
     for (const w of ['SmileCare', 'smilecare', 'Indiranagar', 'Whitefield', 'Bengaluru', 'Ananya', 'Vikram', 'Sunitha', 'g.page', 'KMC/DC']) expect(txt, w).not.toContain(w);
@@ -896,5 +896,463 @@ describe('marketing: planner, prompt tools, automations, frequency cap, analytic
     expect(v1.views).toBe(v0 + 2); expect(v1.sources.some((s) => s.source === 'google')).toBe(true);
     const pat = (await api('GET', '/api/marketing/patients?segment=all')).body;
     expect(pat.rows.length).toBeGreaterThan(5); expect(pat.rows[0]).toHaveProperty('optIn');
+  });
+});
+
+describe('front desk dashboard', () => {
+  it('gives reception one consistent picture of today, and moves with check-in, the queue and payments', async () => {
+    const s0 = (await api('GET', '/api/frontdesk/summary')).body;
+    expect(s0.kpis.appointments).toBe(s0.schedule.filter((x) => x.status !== 'cancelled').length);
+    expect(s0.kpis.waiting).toBe(s0.queue.length);
+    expect(s0.kpis.checkedIn).toBe(s0.schedule.filter((x) => x.visitId).length);
+    expect(s0.dentists.length).toBeGreaterThan(0); expect(s0.chairs.total).toBeGreaterThan(0);
+    for (const k of ['schedule', 'queue', 'upcoming', 'walkIns', 'activity']) expect(Array.isArray(s0[k])).toBe(true);
+
+    // Check in someone who has not arrived: they get a token, join the queue and the counts move together.
+    // Book someone for a couple of minutes from now, so the test does not depend on the time of day the seed was built.
+    const anyone = (await api('GET', '/api/patients')).body[0];
+    const booked = await api('POST', '/api/appointments', { patientId: anyone.id, visitTypeId: 'vt_cleaning', providerId: 'prov_khan', locationId: 'loc_whitefield', start: new Date(Date.now() + 2 * 60000).toISOString(), sendForms: false });
+    expect(booked.status).toBeLessThan(300);
+    const sBooked = (await api('GET', '/api/frontdesk/summary')).body;
+    expect(sBooked.kpis.appointments).toBe(s0.kpis.appointments + 1);
+    const expected = sBooked.schedule.find((x) => x.id === booked.body.id);
+    expect(expected.status).toBe('pending'); expect(expected.sameDay).toBe(true);
+    await api('POST', `/api/arrivals/${expected.id}/arrive`);
+    const s1 = (await api('GET', '/api/frontdesk/summary')).body;
+    const mine = s1.schedule.find((x) => x.id === expected.id);
+    expect(mine.token).toBeTruthy(); expect(['checked_in', 'waiting']).toContain(mine.status);
+    expect(s1.kpis.checkedIn).toBe(sBooked.kpis.checkedIn + 1);
+    expect(s1.queue.some((x) => x.id === expected.id)).toBe(true);
+
+    // Taking a payment raises today's collections and lowers what is owed by the same visit.
+    const before = s1.payments.collected;
+    await api('POST', `/api/arrivals/${expected.id}/payment`, { amount: 900, mode: 'UPI', reference: 'UPI-TEST' });
+    const s2 = (await api('GET', '/api/frontdesk/summary')).body;
+    expect(s2.payments.collected).toBe(before + 900); expect(s2.kpis.collected).toBe(s2.payments.collected);
+    expect(s2.schedule.find((x) => x.id === expected.id).payment).toBe('paid');
+    expect(s2.payments.byMode.find((m) => m.mode === 'UPI').amount).toBeGreaterThanOrEqual(900);
+
+    // A branch filter only ever shows that branch.
+    const br = (await api('GET', '/api/frontdesk/summary?locationId=loc_whitefield')).body;
+    expect(br.schedule.every((x) => x.locationId === 'loc_whitefield')).toBe(true);
+    expect(br.chairs.total).toBe(2);
+  });
+
+  it('is for reception, admins and owners, not dentists', async () => {
+    const dentist = (await raw('POST', '/api/auth/demo', { role: 'dentist' })).body.token;
+    const res = await raw('GET', '/api/frontdesk/summary', null, { authorization: `Bearer ${dentist}` });
+    expect(res.status).toBe(403);
+    const desk = (await raw('POST', '/api/auth/demo', { role: 'front_desk' })).body.token;
+    expect((await raw('GET', '/api/frontdesk/summary', null, { authorization: `Bearer ${desk}` })).status).toBe(200);
+  });
+});
+
+describe('email integration', () => {
+  it('says plainly when email is not connected, and sends a real message through the provider when it is', async () => {
+    delete process.env.RESEND_API_KEY;
+    const off = await api('POST', '/api/integrations/email/test', { to: 'owner@example.in' });
+    expect(off.status).toBe(503); expect(off.body.error).toMatch(/RESEND_API_KEY/);
+    expect((await api('GET', '/api/integrations/status')).body.server.email).toBe(false);
+    expect((await api('POST', '/api/integrations/email/test', { to: 'not-an-email' })).status).toBe(400);
+
+    // Connected: the provider is replaced by a stand-in that records what would have been sent.
+    const realFetch = globalThis.fetch; const sent = [];
+    vi.stubGlobal('fetch', (url, opts) => (String(url).includes('api.resend.com') ? (sent.push({ url: String(url), auth: opts.headers.authorization, body: JSON.parse(opts.body) }), Promise.resolve(new Response('{"id":"test"}', { status: 200 }))) : realFetch(url, opts)));
+    process.env.RESEND_API_KEY = 're_test_key'; process.env.MAIL_FROM = 'SmileCare <hello@smilecare.example>';
+    try {
+      const st = (await api('GET', '/api/integrations/status')).body;
+      expect(st.server.email).toBe(true); expect(st.mailFrom).toBe('SmileCare <hello@smilecare.example>');
+      const ok = await api('POST', '/api/integrations/email/test', { to: 'Owner@Example.in' });
+      expect(ok.status).toBe(200); expect(ok.body.to).toBe('owner@example.in');
+      expect(sent).toHaveLength(1);
+      expect(sent[0].auth).toBe('Bearer re_test_key');
+      expect(sent[0].body.to).toEqual(['owner@example.in']); expect(sent[0].body.from).toBe('SmileCare <hello@smilecare.example>');
+      expect(sent[0].body.subject).toMatch(/test email/i);
+
+      // Only owners and admins may send it.
+      const desk = (await raw('POST', '/api/auth/demo', { role: 'front_desk' })).body.token;
+      expect((await raw('POST', '/api/integrations/email/test', { to: 'x@example.in' }, { authorization: `Bearer ${desk}` })).status).toBe(403);
+      expect(sent).toHaveLength(1);
+    } finally { vi.unstubAllGlobals(); delete process.env.RESEND_API_KEY; delete process.env.MAIL_FROM; }
+  });
+});
+
+describe('front desk, end to end', () => {
+  it('takes one patient from registration to booking, check-in, the queue, payment, receipt and recall', async () => {
+    // 1. Register a new patient, then find them again by mobile number instead of creating a duplicate.
+    const created = await api('POST', '/api/patients', { firstName: 'Nisha', lastName: 'Verma', phone: '98765 40001', language: 'hi', locationId: 'loc_whitefield' });
+    expect(created.status).toBeLessThan(300); const pid = created.body.id;
+    const found = (await api('GET', '/api/patients?q=9876540001')).body;
+    expect(found.map((p) => p.id)).toContain(pid);
+
+    // 2. Book with a dentist; the same dentist cannot be double-booked for the same time.
+    const start = new Date(Date.now() + 3 * 60000).toISOString();
+    const appt = await api('POST', '/api/appointments', { patientId: pid, visitTypeId: 'vt_cleaning', providerId: 'prov_khan', locationId: 'loc_whitefield', start, sendForms: false });
+    expect(appt.status).toBeLessThan(300); const aid = appt.body.id;
+    const other = (await api('GET', '/api/patients')).body.find((p) => p.id !== pid);
+    const clash = await api('POST', '/api/appointments', { patientId: other.id, visitTypeId: 'vt_cleaning', providerId: 'prov_khan', locationId: 'loc_whitefield', start, sendForms: false });
+    expect(clash.status).toBe(400); expect(clash.body.error).toMatch(/already has an appointment/);
+
+    // 3. Confirm, then check in at the desk: a token is issued and the patient joins the queue.
+    expect((await api('POST', `/api/appointments/${aid}/confirm`)).body.status).toBe('confirmed');
+    const visit = (await api('POST', `/api/arrivals/${aid}/arrive`)).body;
+    expect(visit.token).toBeTruthy();
+    let dash = (await api('GET', '/api/frontdesk/summary?locationId=loc_whitefield')).body;
+    expect(dash.queue.find((q) => q.id === aid).token).toBe(visit.token);
+
+    // 4. Mark waiting, call, seat and finish: each step shows on the dashboard.
+    await api('PATCH', `/api/arrivals/visits/${visit.id}`, { status: 'ready' });
+    const called = (await api('POST', '/api/arrivals/call-next', { providerId: 'prov_khan', locationId: 'loc_whitefield' })).body.called;
+    expect(called.token).toBe(visit.token);
+    await api('PATCH', `/api/arrivals/visits/${visit.id}`, { status: 'brought_back' });
+    dash = (await api('GET', '/api/frontdesk/summary?locationId=loc_whitefield')).body;
+    expect(dash.schedule.find((s) => s.id === aid).status).toBe('in_chair');
+    expect(dash.chairs.inUse).toBe(1); expect(dash.dentists.find((d) => d.id === 'prov_khan').state).toBe('with_patient');
+    await api('PATCH', `/api/arrivals/visits/${visit.id}`, { status: 'done' });
+    dash = (await api('GET', '/api/frontdesk/summary?locationId=loc_whitefield')).body;
+    expect(dash.schedule.find((s) => s.id === aid).status).toBe('completed');
+    expect(dash.payments.unpaid.some((u) => u.id === aid)).toBe(true);
+
+    // 5. Collect by UPI: collections rise, the visit leaves the unpaid list and a numbered receipt exists.
+    const before = dash.kpis.collected;
+    await api('POST', `/api/arrivals/${aid}/payment`, { amount: 1500, mode: 'UPI', reference: 'UPI-E2E-1' });
+    dash = (await api('GET', '/api/frontdesk/summary?locationId=loc_whitefield')).body;
+    expect(dash.kpis.collected).toBe(before + 1500);
+    expect(dash.payments.unpaid.some((u) => u.id === aid)).toBe(false);
+    const receipt = (await api('GET', `/api/arrivals/${aid}/receipt`)).body;
+    expect(JSON.stringify(receipt)).toMatch(/UPI/); expect(JSON.stringify(receipt)).toMatch(/Nisha/);
+
+    // 6. A cleaning sets the next recall date on the patient, so follow-up has something to act on.
+    const after = (await api('GET', `/api/patients/${pid}`)).body;
+    expect((after.patient || after).nextRecallDue).toBeTruthy();
+
+    // 7. Another clinic sees none of this.
+    const reg = await signup({ name: 'Dr Other', email: 'other-e2e@example.in', password: 'Secret@123', clinicName: 'Other E2E Dental' });
+    const theirs = (await raw('GET', '/api/frontdesk/summary', null, { authorization: `Bearer ${reg.body.token}` })).body;
+    expect(theirs.schedule).toHaveLength(0); expect(theirs.kpis.collected).toBe(0);
+  });
+});
+
+describe('clinic branding', () => {
+  it('is saved by an owner, cleaned, and shown on every patient-facing screen', async () => {
+    const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+    const saved = await api('PUT', '/api/settings', { branding: { color: '#0F766E', logo: png, welcome: 'Welcome to SmileCare' } });
+    expect(saved.status).toBe(200);
+    const want = { color: '#0f766e', logo: png, welcome: 'Welcome to SmileCare' };
+    expect((await pub('GET', '/api/settings')).body.branding).toEqual(want);
+    expect((await pub('GET', '/api/public/clinic')).body.branding).toEqual(want);
+    expect((await pub('GET', '/api/arrivals/board')).body.branding).toEqual(want);
+    expect((await pub('POST', '/api/kiosk/sessions', {})).body.branding).toEqual(want);
+
+    // The logo also reaches the pre-visit forms page a patient opens, and the receipt for a payment.
+    const packets = (await api('GET', '/api/forms')).body;
+    expect(packets.length).toBeGreaterThan(0);
+    expect((await pub('GET', '/api/forms/token/' + packets[0].token)).body.branding).toEqual(want);
+    const paid = (await api('GET', '/api/frontdesk/summary')).body.schedule.find((x) => x.payment === 'paid');
+    if (paid) expect((await api('GET', '/api/arrivals/' + paid.id + '/receipt')).body.branding).toEqual(want);
+
+    // A colour that is not a hex falls back to the default; a file that is not an image is refused.
+    expect((await api('PUT', '/api/settings', { branding: { color: 'red; background:url(x)' } })).body.branding.color).toBe('#2563eb');
+    const bad = await api('PUT', '/api/settings', { branding: { logo: 'data:text/html;base64,PHNjcmlwdD4=' } });
+    expect(bad.status).toBe(400);
+
+    // Reception cannot change the clinic's branding.
+    const desk = (await raw('POST', '/api/auth/demo', { role: 'front_desk' })).body.token;
+    expect((await raw('PUT', '/api/settings', { branding: { color: '#000000' } }, { authorization: 'Bearer ' + desk })).status).toBe(403);
+  });
+
+  it('tells a checked-in patient how many people are ahead of them', async () => {
+    // Two people with nothing else booked today, so the kiosk can only find these visits.
+    const anyone = [(await api('POST', '/api/patients', { firstName: 'Asha', lastName: 'Queue', phone: '98111 00001', locationId: 'loc_whitefield' })).body, (await api('POST', '/api/patients', { firstName: 'Bala', lastName: 'Queue', phone: '98111 00002', locationId: 'loc_whitefield' })).body];
+    const mk = async (i, mins) => (await api('POST', '/api/appointments', { patientId: anyone[i].id, visitTypeId: 'vt_cleaning', providerId: 'prov_khan', locationId: 'loc_whitefield', start: new Date(Date.now() + mins * 60000).toISOString(), durationMin: 1, sendForms: false })).body;
+    const first = await mk(0, 2); const second = await mk(1, 4); // minutes apart, so the test also works late in the evening
+    expect(second.id).toBeTruthy();
+    await api('POST', '/api/arrivals/' + first.id + '/arrive');
+    await new Promise((r) => setTimeout(r, 15));
+    const ks = (await pub('POST', '/api/kiosk/sessions', { locationId: 'loc_whitefield' })).body;
+    const mine = (await pub('POST', '/api/kiosk/sessions/' + ks.id + '/identify', { phone: anyone[1].phone })).body;
+    const view = mine.choose ? (await pub('POST', '/api/kiosk/sessions/' + ks.id + '/identify', { patientId: mine.choose[0].id })).body : mine;
+    expect(view.visit && view.visit.token).toBeTruthy();
+    expect(view.visit.ahead).toBe(1);
+  });
+});
+
+describe('clinic forms', () => {
+  it('lets a clinic write a form, send it to everyone, collect answers and see who has finished', async () => {
+    const tpl = (await api('GET', '/api/forms/templates')).body;
+    expect(tpl.forms).toEqual([]); expect(tpl.starters.length).toBeGreaterThan(2);
+
+    // Start from the general consent starter and save it for every visit.
+    const made = await api('POST', '/api/forms/templates', { ...tpl.starters[0], appliesTo: 'all' });
+    expect(made.status).toBe(201); const form = made.body;
+    expect(form.fields.every((f) => f.id)).toBe(true);
+    expect((await api('POST', '/api/forms/templates', { name: '', fields: form.fields })).status).toBe(400);
+    expect((await api('POST', '/api/forms/templates', { name: 'Only a statement', fields: [{ type: 'info', label: 'Read this' }] })).status).toBe(400);
+
+    // Send to all upcoming visits: each of those patients gets the forms link.
+    const sent = (await api('POST', '/api/forms/templates/' + form.id + '/send')).body;
+    expect(sent.sent).toBeGreaterThan(0);
+
+    // A patient opens their link, sees the clinic form after the standard sections, and answers it.
+    const packets = (await api('GET', '/api/forms')).body;
+    const pk = packets.find((p) => p.custom.some((c) => c.id === form.id));
+    expect(pk).toBeTruthy(); expect(pk.custom[0].complete).toBe(false);
+    const page = (await pub('GET', '/api/forms/token/' + pk.token)).body;
+    expect(page.custom[0].name).toBe(form.name); expect(page.custom[0].fields.length).toBe(form.fields.length);
+    const answers = {}; for (const f of form.fields) answers[f.id] = f.type === 'yesno' ? 'yes' : f.type === 'date' ? '2026-11-23' : f.type === 'info' ? undefined : 'Nisha Verma';
+    const required = form.fields.find((f) => f.required);
+    const missing = await pub('PUT', '/api/forms/token/' + pk.token + '/custom/' + form.id, { data: { ...answers, [required.id]: '' } });
+    expect(missing.status).toBe(400); expect(missing.body.error).toMatch(/Please answer/);
+    const ok = await pub('PUT', '/api/forms/token/' + pk.token + '/custom/' + form.id, { data: answers });
+    expect(ok.status).toBe(200); expect(ok.body.custom[0].complete).toBe(true);
+
+    // Staff see it as done, and the form's counts move.
+    const after = (await api('GET', '/api/forms')).body.find((p) => p.id === pk.id);
+    expect(after.custom[0].complete).toBe(true); expect(after.custom[0].by).toBe('patient');
+    const stats = (await api('GET', '/api/forms/templates')).body.forms[0];
+    expect(stats.answered).toBe(1); expect(stats.sentTo).toBeGreaterThan(0);
+
+    // Edit: limit it to one visit type, so it no longer goes with other visits. Then switch it off and delete it.
+    const edited = await api('PUT', '/api/forms/templates/' + form.id, { ...form, name: 'General consent', appliesTo: 'visitTypes', visitTypeIds: ['vt_child'] });
+    expect(edited.body.name).toBe('General consent'); expect(edited.body.id).toBe(form.id);
+    expect((await api('PUT', '/api/forms/templates/' + form.id, { ...form, active: false })).body.active).toBe(false);
+    expect((await api('POST', '/api/forms/templates/' + form.id + '/send')).status).toBe(400);
+    expect((await api('DELETE', '/api/forms/templates/' + form.id)).status).toBe(200);
+    expect((await api('GET', '/api/forms/templates')).body.forms).toEqual([]);
+  });
+
+  it('drafts a form from a description and from an uploaded list of questions, without saving either', async () => {
+    const draft = (await api('POST', '/api/forms/templates/draft', { prompt: 'consent form for tooth extraction' })).body;
+    expect(draft.engine).toBe('rules');
+    expect(draft.form.name).toMatch(/extraction/i);
+    expect(draft.form.fields[0].type).toBe('info');
+    expect(draft.form.fields.some((f) => f.type === 'signature')).toBe(true);
+    expect((await api('POST', '/api/forms/templates/draft', { prompt: 'x' })).status).toBe(400);
+
+    const upload = (await api('POST', '/api/forms/templates/import', { name: 'new_patient_questions.txt', text: '1. Do you smoke?\n2. How did you hear about us: Google, Friend, Walk-in\n3. Date of last dental visit\n- Please describe your main concern\nI agree to be contacted on WhatsApp *' })).body;
+    expect(upload.form.name).toBe('new patient questions');
+    expect(upload.form.fields.map((f) => f.type)).toEqual(['yesno', 'choice', 'date', 'textarea', 'yesno']);
+    expect(upload.form.fields[1].options).toEqual(['Google', 'Friend', 'Walk-in']);
+    expect(upload.form.fields[4].required).toBe(true);
+    expect((await api('POST', '/api/forms/templates/import', { text: '   ' })).status).toBe(400);
+    expect((await api('GET', '/api/forms/templates')).body.forms).toEqual([]);
+  });
+});
+
+describe('dentist workspace', () => {
+  it('connects the dentist and reception: arrivals, intake review, handoff, visit close and follow-up tasks', async () => {
+    const dentistToken = (await raw('POST', '/api/auth/demo', { role: 'dentist' })).body;
+    const dent = (m, path, body) => raw(m, path, body, { authorization: 'Bearer ' + dentistToken.token });
+    const d0 = (await dent('GET', '/api/dentist/dashboard')).body;
+    expect(d0.provider.id).toBeTruthy();
+    const provId = d0.provider.id;
+    expect(d0.kpis.appointments).toBe(d0.schedule.filter((x) => x.status !== 'cancelled').length);
+
+    // Reception books and checks in a new patient for this dentist, and leaves a note.
+    const pat = (await api('POST', '/api/patients', { firstName: 'Meena', lastName: 'Handoff', phone: '98222 00001' })).body;
+    const prov = (await api('GET', '/api/settings')).body.providers.find((x) => x.id === provId);
+    const appt = (await api('POST', '/api/appointments', { patientId: pat.id, visitTypeId: 'vt_followup', providerId: provId, locationId: prov.locationIds[0], start: new Date(Date.now() + 2 * 60000).toISOString() })).body;
+    expect(appt.id).toBeTruthy();
+    expect((await api('PUT', '/api/frontdesk/handoff/' + appt.id, { note: 'x' })).status).toBe(400); // not checked in yet
+    await api('POST', '/api/arrivals/' + appt.id + '/arrive');
+    expect((await api('PUT', '/api/frontdesk/handoff/' + appt.id, { note: 'Brought previous X-rays. Two files added.' })).status).toBe(200);
+
+    // The dentist sees the arrival, the queue position and the note, and acknowledges it.
+    const q = (await dent('GET', '/api/dentist/queue')).body;
+    const mine = q.queue.find((x) => x.id === appt.id);
+    expect(mine.token).toBeTruthy(); expect(mine.position).toBeGreaterThan(0); expect(mine.handoff.note).toMatch(/X-rays/);
+    expect((await dent('GET', '/api/dentist/dashboard')).body.attention.handoffsNew).toBeGreaterThan(0);
+    expect((await dent('POST', '/api/dentist/appointments/' + appt.id + '/handoff/acknowledge')).body.acknowledgedAt).toBeTruthy();
+
+    // Intake: the patient answers one section; the dentist reads it, cannot edit it, and asks reception to clarify.
+    const pk = (await api('GET', '/api/forms')).body.find((p) => p.appointment.id === appt.id);
+    await pub('PUT', '/api/forms/token/' + pk.token + '/sections/dentalConcerns', { data: { chiefComplaint: 'Discomfort in one tooth for a few days' } });
+    const list = (await dent('GET', '/api/dentist/intake')).body;
+    expect(list.items.find((x) => x.appointmentId === appt.id).intake.state).toBe('pending_review');
+    const detail = (await dent('GET', '/api/dentist/intake/' + pk.id)).body;
+    expect(detail.patient.name).toBe('Meena Handoff');
+    expect(JSON.stringify(detail.questionnaire)).toMatch(/Discomfort in one tooth/);
+    expect((await dent('PUT', '/api/forms/' + pk.id + '/sections/dentalConcerns', { data: { chiefComplaint: 'changed' } })).status).toBeGreaterThanOrEqual(200);
+    expect((await dent('POST', '/api/dentist/intake/' + pk.id + '/clarification', { note: '' })).status).toBe(400);
+    const clar = (await dent('POST', '/api/dentist/intake/' + pk.id + '/clarification', { note: 'Which tooth, and for how long?' })).body;
+    expect(clar.intake.state).toBe('clarification'); expect(clar.task.type).toBe('clarification');
+    expect((await dent('POST', '/api/dentist/intake/' + pk.id + '/review', {})).body.state).toBe('reviewed');
+
+    // Reception sees the task on the front desk dashboard and completes it; the dentist sees it closed.
+    const fd = (await api('GET', '/api/frontdesk/summary')).body;
+    const task = fd.tasks.items.find((t) => t.id === clar.task.id);
+    expect(task.patientName).toBe('Meena Handoff'); expect(task.priority).toBe('high');
+    expect((await api('PATCH', '/api/frontdesk/tasks/' + task.id, { status: 'in_progress' })).body.status).toBe('in_progress');
+    expect((await api('PATCH', '/api/frontdesk/tasks/' + task.id, { status: 'done', note: 'Upper right molar, 4 days.' })).body.status).toBe('done');
+    expect((await dent('GET', '/api/dentist/dashboard')).body.attention.tasksAnswered).toBe(1);
+    const fu = (await dent('GET', '/api/dentist/followups')).body;
+    expect(fu.tasks.find((t) => t.id === task.id).resolution).toMatch(/Upper right molar/);
+    expect((await dent('GET', '/api/dentist/dashboard')).body.attention.tasksAnswered).toBe(0);
+
+    // The dentist calls, starts and completes the visit, and asks reception to book the next one.
+    expect((await dent('POST', '/api/dentist/appointments/' + appt.id + '/call')).body.status).toBe('called');
+    expect((await dent('POST', '/api/dentist/appointments/' + appt.id + '/start')).body.status).toBe('in_progress');
+    expect((await api('GET', '/api/frontdesk/summary')).body.schedule.find((x) => x.id === appt.id).status).toBe('in_chair');
+    const done = (await dent('POST', '/api/dentist/appointments/' + appt.id + '/complete', { bookNext: true, instruction: 'Review in two weeks, 30 minutes.' })).body;
+    expect(done.status).toBe('completed'); expect(done.tasks[0].type).toBe('book_next');
+    expect((await api('GET', '/api/frontdesk/summary')).body.schedule.find((x) => x.id === appt.id).status).toBe('completed');
+    expect((await dent('POST', '/api/dentist/followups', { type: 'callback', patientId: pat.id, description: 'Asked about whitening fees.', priority: 'high' })).status).toBe(201);
+    expect((await dent('POST', '/api/dentist/followups', { type: 'nope' })).status).toBe(400);
+
+    // A dentist cannot act on another dentist's patient, and reception cannot open the dentist workspace.
+    const other = d0.schedule.length && (await api('GET', '/api/frontdesk/summary')).body.schedule.find((x) => x.providerId !== provId);
+    if (other) expect((await dent('POST', '/api/dentist/appointments/' + other.id + '/start')).status).toBe(403);
+    const desk = (await raw('POST', '/api/auth/demo', { role: 'front_desk' })).body.token;
+    expect((await raw('GET', '/api/dentist/dashboard', null, { authorization: 'Bearer ' + desk })).status).toBe(403);
+    expect((await dent('PATCH', '/api/frontdesk/tasks/' + task.id, { status: 'pending' })).status).toBe(403);
+  });
+});
+
+describe('security', () => {
+  it('never serves a real clinic\'s records to someone who only knows its web name', async () => {
+    const reg = await signup({ name: 'Dr Private', email: 'private@example.in', password: 'Secret@123', clinicName: 'Private Dental' });
+    const slug = reg.body.tenant.slug;
+    await raw('POST', '/api/patients', { firstName: 'Secret', lastName: 'Patient', phone: '98333 00001' }, { authorization: 'Bearer ' + reg.body.token });
+    for (const path of ['/api/patients', '/api/conversations', '/api/fhir/Patient', '/api/fhir/Appointment', '/api/forms', '/api/frontdesk/summary', '/api/dentist/dashboard', '/api/appointments', '/api/forms/templates']) {
+      const res = await raw('GET', path + '?t=' + slug);
+      expect([401, 403], path).toContain(res.status);
+      expect(JSON.stringify(res.body), path).not.toMatch(/Secret/);
+    }
+    // The clinic's own API key still works for its EHR.
+    const key = (await raw('POST', '/api/integrations/api-key', {}, { authorization: 'Bearer ' + reg.body.token })).body.apiKey;
+    const fhir = await raw('GET', '/api/fhir/Patient', null, { 'x-api-key': key });
+    expect(fhir.status).toBe(200); expect(JSON.stringify(fhir.body)).toMatch(/Secret/);
+    expect((await raw('GET', '/api/fhir/Patient', null, { 'x-api-key': 'wrong-key' })).status).toBe(401);
+  });
+
+  it('encrypts data files when a key is set, reads them back, and refuses to overwrite a file it cannot open', async () => {
+    const { jsonStore, DataKeyError } = await import('../src/store.js');
+    const fs = await import('node:fs'); const os = await import('node:os'); const path = await import('node:path');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clinovara-enc-')); const file = path.join(dir, 'clinic.json');
+    const doc = () => ({ patients: [{ name: 'Nisha Verma', phone: '9876540001' }] });
+    try {
+      // Without a key the file is plain JSON, as before.
+      delete process.env.CLINOVARA_DATA_KEY;
+      jsonStore({ file, initial: doc }).flush();
+      expect(fs.readFileSync(file, 'utf8')).toMatch(/Nisha Verma/);
+
+      // With a key: the plain file is read once, then written encrypted. No patient detail is readable on disk.
+      process.env.CLINOVARA_DATA_KEY = 'correct horse battery staple 9f2c';
+      const s1 = jsonStore({ file, initial: () => ({ patients: [] }) });
+      expect(s1.db.patients[0].name).toBe('Nisha Verma');
+      s1.db.patients.push({ name: 'Second Person', phone: '9000000002' }); s1.flush();
+      const onDisk = fs.readFileSync(file, 'utf8');
+      expect(onDisk).toMatch(/clinovaraEncrypted/); expect(onDisk).not.toMatch(/Nisha|Second Person|9876540001/);
+      expect(jsonStore({ file, initial: () => ({ patients: [] }) }).db.patients).toHaveLength(2);
+
+      // The wrong key, or no key, stops with an error and leaves the file exactly as it was.
+      process.env.CLINOVARA_DATA_KEY = 'a different key';
+      expect(() => jsonStore({ file, initial: () => ({ patients: [] }) })).toThrow(DataKeyError);
+      delete process.env.CLINOVARA_DATA_KEY;
+      expect(() => jsonStore({ file, initial: () => ({ patients: [] }) })).toThrow(DataKeyError);
+      expect(fs.readFileSync(file, 'utf8')).toBe(onDisk);
+    } finally { delete process.env.CLINOVARA_DATA_KEY; fs.rmSync(dir, { recursive: true, force: true }); }
+  });
+});
+
+describe('phone voice assistant', () => {
+  it('stays closed without a bridge secret, then runs a call both ways: tools for speech models, text turns for Claude', async () => {
+    delete process.env.VOICE_WEBHOOK_SECRET;
+    expect((await pub('POST', '/api/voice/incoming', { from: '9845011002' })).status).toBe(503);
+
+    process.env.VOICE_WEBHOOK_SECRET = 'bridge-secret-for-tests';
+    const bridge = (m, path, body) => pub(m, path, body, { 'x-voice-secret': 'bridge-secret-for-tests' });
+    try {
+      expect((await pub('POST', '/api/voice/incoming', { from: '9845011002' }, { 'x-voice-secret': 'wrong' })).status).toBe(401);
+      // Off until an owner chooses a provider and switches it on.
+      expect((await bridge('POST', '/api/voice/incoming', { from: '9845011002' })).status).toBe(409);
+      const st0 = (await api('GET', '/api/voice/status')).body;
+      expect(st0.ready).toBe(false); expect(st0.providers.map((p) => p.id)).toEqual(['none', 'openai_realtime', 'claude_elevenlabs']);
+      expect(JSON.stringify(st0)).not.toMatch(/bridge-secret-for-tests/);
+      const st1 = (await api('PUT', '/api/voice/settings', { provider: 'openai_realtime', enabled: true, number: '+91 80 4123 4567' })).body;
+      expect(st1.settings.provider).toBe('openai_realtime'); expect(st1.missing).toContain('OPENAI_API_KEY'); expect(st1.ready).toBe(false);
+      expect((await api('PUT', '/api/voice/settings', { provider: 'nope' })).status).toBe(400);
+
+      // Speech to speech: the call opens with instructions and tools; the model uses tools to reach the diary.
+      const start = (await bridge('POST', '/api/voice/incoming', { from: '98444 55667', callSid: 'exo-1' })).body;
+      expect(start.callId).toBeTruthy(); expect(start.say.length).toBeGreaterThan(5);
+      expect(start.session.mode).toBe('speech'); expect(start.session.tools.map((t) => t.name)).toEqual(['clinic_info', 'find_slots', 'book_appointment', 'take_message', 'end_call']);
+      expect(start.session.instructions).toMatch(/SmileCare/); expect(start.session.instructions).toMatch(/not a dentist/i);
+      const tool = async (name, args) => (await bridge('POST', '/api/voice/calls/' + start.callId + '/tool', { name, arguments: args })).body;
+      expect((await tool('clinic_info', {})).branches.length).toBe(2);
+      expect((await tool('book_appointment', { slot_id: 's1', full_name: 'Ravi Kumar' })).ok).toBe(false); // nothing offered yet
+      const found = await tool('find_slots', JSON.stringify({ service: 'cleaning', time_of_day: 'any' }));
+      expect(found.ok).toBe(true); expect(found.slots.length).toBeGreaterThan(0); expect(found.slots[0].slot_id).toBe('s1');
+      expect((await tool('book_appointment', { slot_id: 's9', full_name: 'Ravi Kumar' })).ok).toBe(false); // not an offered slot
+      expect((await tool('book_appointment', { slot_id: 's1', full_name: '' })).ok).toBe(false);
+      const booked = await tool('book_appointment', { slot_id: 's1', full_name: 'Ravi Kumar' });
+      expect(booked.booked).toBe(true); expect(booked.patient).toBe('Ravi Kumar'); expect(booked.when).toBe(found.slots[0].when);
+      // The booking is a real appointment for a real new patient, visible to staff.
+      const patient = (await api('GET', '/api/patients?q=9844455667')).body[0];
+      expect(patient.firstName).toBe('Ravi'); expect(patient.upcoming.source).toBe('ai');
+      // A clinical question becomes an urgent callback, never an answer.
+      const msg = await tool('take_message', { summary: 'Swelling after an extraction yesterday, asks which medicine to take', urgency: 'urgent' });
+      expect(msg.recorded).toBe(true);
+      expect(JSON.stringify((await api('GET', '/api/callbacks')).body.items)).toMatch(/URGENT\. Phone call: Swelling/);
+      expect((await tool('launch_rocket', {})).ok).toBe(false);
+      await bridge('POST', '/api/voice/calls/' + start.callId + '/transcript', { from: 'caller', text: 'I want a cleaning appointment' });
+      const ended = (await bridge('POST', '/api/voice/calls/' + start.callId + '/end', { reason: 'hangup' })).body;
+      expect(ended.status).toBe('ended');
+      expect((await bridge('POST', '/api/voice/calls/' + start.callId + '/tool', { name: 'clinic_info' })).status).toBe(400);
+      const log = (await api('GET', '/api/calls')).body.find((c) => c.id === start.callId);
+      expect(log.externalId).toBe('exo-1'); expect(JSON.stringify(log.transcript)).toMatch(/Booked/);
+
+      // Text in the middle: the bridge sends what the caller said; the same assistant that runs chat replies.
+      await api('PUT', '/api/voice/settings', { provider: 'claude_elevenlabs' });
+      const c2 = (await bridge('POST', '/api/voice/incoming', { from: '98444 11223' })).body;
+      expect(c2.session.mode).toBe('text');
+      const turn = (await bridge('POST', '/api/voice/calls/' + c2.callId + '/turn', { text: 'What time do you open tomorrow?' })).body;
+      expect(turn.say.length).toBeGreaterThan(5);
+      expect((await bridge('POST', '/api/voice/calls/' + c2.callId + '/turn', { text: '' })).status).toBe(400);
+
+      // Reception cannot change the provider, and the bridge secret alone does not open the staff API.
+      const desk = (await raw('POST', '/api/auth/demo', { role: 'front_desk' })).body.token;
+      expect((await raw('PUT', '/api/voice/settings', { enabled: false }, { authorization: 'Bearer ' + desk })).status).toBe(403);
+      expect((await bridge('GET', '/api/voice/status')).status).toBe(401);
+    } finally { delete process.env.VOICE_WEBHOOK_SECRET; }
+  });
+});
+
+describe('roles and permissions', () => {
+  it('closes owner-only areas to reception and dentists on the server, not just in the menu', async () => {
+    const tok = {}; for (const role of ['front_desk', 'dentist']) tok[role] = (await raw('POST', '/api/auth/demo', { role })).body.token;
+    const as = (role, m, path, body) => (role === 'owner' ? api(m, path, body) : raw(m, path, body, { authorization: 'Bearer ' + tok[role] }));
+    const cases = [
+      // [method, path, owner, front desk, dentist]
+      ['GET', '/api/admin/export', 200, 403, 403], ['GET', '/api/integrations', 200, 403, 403], ['GET', '/api/integrations/log', 200, 403, 403],
+      ['GET', '/api/insights?days=30', 200, 200, 200], ['GET', '/api/dashboard?days=30', 200, 403, 403], ['GET', '/api/team', 200, 403, 403],
+      ['GET', '/api/patients/export.csv', 200, 403, 403], ['GET', '/api/settings/procedures/export.csv', 200, 403, 403], ['GET', '/api/voice/status', 200, 403, 403],
+      ['GET', '/api/marketing', 200, 200, 403], ['GET', '/api/frontdesk/summary', 200, 200, 403], ['GET', '/api/dentist/dashboard', 200, 403, 200],
+      ['GET', '/api/admin/activity', 200, 200, 200], ['GET', '/api/settings', 200, 200, 200], ['GET', '/api/patients', 200, 200, 200], ['GET', '/api/forms/templates', 200, 200, 200],
+      ['PUT', '/api/settings', 200, 403, 403], ['POST', '/api/forms/templates', 400, 403, 403], ['DELETE', '/api/forms/templates/none', 400, 403, 403],
+    ];
+    for (const [m, path, owner, desk, dentist] of cases) {
+      const body = m === 'GET' ? null : {};
+      expect((await as('owner', m, path, body)).status, `owner ${m} ${path}`).toBe(owner);
+      expect((await as('front_desk', m, path, body)).status, `front desk ${m} ${path}`).toBe(desk);
+      expect((await as('dentist', m, path, body)).status, `dentist ${m} ${path}`).toBe(dentist);
+    }
+    // Insights stay open to staff for the operational numbers, but money is left out for anyone below admin.
+    expect((await as('front_desk', 'GET', '/api/insights?days=30')).body.revenue).toBeUndefined();
+    expect((await as('dentist', 'GET', '/api/insights?days=30')).body.revenue).toBeUndefined();
+    // Only reception and managers take payments.
+    const paid = (await api('GET', '/api/frontdesk/summary')).body.schedule.find((x) => x.payment === 'unpaid' && x.fee > 0);
+    if (paid) expect((await as('dentist', 'POST', '/api/arrivals/' + paid.id + '/payment', { amount: 1, mode: 'Cash' })).status).toBe(403);
+
+    // A dentist cannot read another dentist's earnings by naming them.
+    const mine = (await as('dentist', 'GET', '/api/dentist/dashboard')).body.provider.id;
+    const other = (await api('GET', '/api/settings')).body.providers.find((x) => x.id !== mine).id;
+    const e = (await as('dentist', 'GET', '/api/doctor/earnings?providerId=' + other)).body;
+    expect(JSON.stringify(e)).not.toMatch(new RegExp(other));
+
+    // The matrix shown in Settings matches what the server enforces.
+    const matrix = (await as('front_desk', 'GET', '/api/auth/permissions')).body;
+    expect(matrix.roles.map((x) => x.id)).toContain('front_desk');
+    expect(matrix.matrix.find((x) => /Integrations/.test(x.area)).roles).toEqual(['owner', 'admin']);
   });
 });

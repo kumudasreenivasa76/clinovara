@@ -6,20 +6,20 @@ import { Card, Body, Pill, Avatar, Empty, usePoll, useAction, Modal, Field, Stat
 import { navigate } from '../App.jsx';
 
 const HEARD = ['Google search', 'Google Maps', 'Friend or family', 'Instagram or Facebook', 'Walked past', 'Doctor referral', 'Other'];
-export default function Patients({ hash, branch, locations }) {
+export default function Patients({ hash, branch, locations, me }) {
   const params = new URLSearchParams(hash.split('?')[1] || '');
   const [q, setQ] = useState('');
   const { data, reload } = usePoll(() => get(`/api/patients?q=${encodeURIComponent(q)}${branch ? `&locationId=${branch}` : ''}`), [q, branch], 0);
   const settings = usePoll(() => get('/api/settings'), []);
   const [open, setOpen] = useState(params.get('id') || null);
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState(() => /[?&]new=1/.test(hash || ''));
   const [importing, setImporting] = useState(false);
   const list = data || [];
   return (
     <>
       <div className="page-head">
         <div><h1>Patients</h1><p>Everyone on file{branch ? ' at this branch' : ''}, with ABHA, insurance or scheme, language, and family links. Import from your existing PMS or EHR with a CSV.</p></div>
-        <div className="row"><a className="btn" href="/api/patients/export.csv" download><IconDownload size={16} />Export CSV</a><button className="btn" onClick={() => setImporting(true)}><IconUpload size={16} />Import CSV</button><button className="btn primary" onClick={() => setCreating(true)}><IconPlus size={16} />Add patient</button></div>
+        <div className="row">{me?.canManage && <a className="btn" href="/api/patients/export.csv" download><IconDownload size={16} />Export CSV</a>}{me?.canManage && <button className="btn" onClick={() => setImporting(true)}><IconUpload size={16} />Import CSV</button>}<button className="btn primary" onClick={() => setCreating(true)}><IconPlus size={16} />Add patient</button></div>
       </div>
       <div className="grid four mb-16">
         <Stat value={list.length} label="Patients" />
